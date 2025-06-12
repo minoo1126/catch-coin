@@ -1,0 +1,111 @@
+import pygame
+import random
+import time
+import sys
+
+pygame.init()
+
+red = (213,50,80)
+green = (0, 255, 0)
+gold = (255, 215, 0)
+blue = (135, 206, 255)
+white = (255, 255, 255)
+
+dis_width = 800
+dis_height = 600
+dis = pygame.display.set_mode((dis_width, dis_height))
+pygame.display.set_caption("Catch Coins")
+
+clock = pygame.time.Clock()
+font = pygame.font.Font(None, 74)
+
+player_width = 20
+player_height = 20
+player_x = (dis_width - player_width) // 2
+player_y = dis_height - player_height - 10
+
+coin_radius = 10
+coin_dy = 5
+
+coin1_x = random.randint(0, dis_width - coin_radius)
+coin1_y = 0
+
+coin2_x = random.randint(0, dis_width - coin_radius)
+coin2_y = -500 
+
+countdown_time = 60
+start_time = time.time()
+score = 0
+
+def draw_player(x, y):
+    pygame.draw.rect(dis, green, [x, y, player_width, player_height])
+
+def draw_coin1(x, y):
+    pygame.draw.circle(dis, gold, [int(x), int(y)], coin_radius)
+
+def draw_coin2(x, y):
+    pygame.draw.circle(dis, red, [int(x), int(y)], coin_radius)
+
+
+def gameLoop():
+    global player_x, coin1_x, coin1_y, coin2_x, coin2_y, score
+
+    running = True
+    while running:
+        elapsed = time.time() - start_time
+        remaining_time = max(0, countdown_time - int(elapsed))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and player_x > 0:
+            player_x -= 5
+        if keys[pygame.K_RIGHT] and player_x < dis_width - player_width:
+            player_x += 5
+
+        coin1_y += coin_dy
+        if coin1_y >= dis_height:
+            coin1_x = random.randint(1, dis_width - coin_radius)
+            coin1_y = 0
+
+        coin2_y += coin_dy
+        if coin2_y >= dis_height:
+            coin2_x = random.randint(0, dis_width - coin_radius)
+            coin2_y = 0
+
+        if (player_x < coin1_x < player_x + player_width and
+            player_y < coin1_y < player_y + player_height):
+            score += 1
+            coin1_x = random.randint(0, dis_width - coin_radius)
+            coin1_y = 0
+
+        if (player_x < coin2_x < player_x + player_width and
+            player_y < coin2_y < player_y + player_height):
+            score -= 1
+            coin2_x = random.randint(0, dis_width - coin_radius)
+            coin2_y = 0
+
+        dis.fill(blue)
+        draw_player(player_x, player_y)
+        draw_coin1(coin1_x, coin1_y)
+        draw_coin2(coin2_x, coin2_y)
+
+        time_text = font.render(f"Time: {remaining_time}", True, white)
+        score_text = font.render(f"Score: {score}", True, white)
+        dis.blit(time_text, (10, 10))
+        dis.blit(score_text, (10, 80))
+
+        pygame.display.update()
+        clock.tick(60)
+
+        if remaining_time <= 0:
+            print(f"Game Over! You caught {score} coins.")
+            running = False
+
+    pygame.quit()
+    sys.exit()
+
+gameLoop()
