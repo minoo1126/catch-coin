@@ -1,0 +1,143 @@
+import pygame
+import sys
+
+pygame.init()
+
+width = 800
+height = 600
+line_width = 5
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("#字棋")
+white = (255,255,255)
+black = (0,0,0)
+red = (255,0,0)
+board = [["" for _ in range(3)] for _ in range(3)]
+player = "X"
+computer = "O"
+
+def draw_board():
+    screen.fill(white)
+    for x in range(1, 3):
+        pygame.draw.line(screen, black, (x * width // 3, 0),(x * width // 3, height),line_width)
+        pygame.draw.line(screen, black, (0, x * height // 3), (width, x * height // 3), line_width)
+
+def draw_marks():
+    cell_width = width // 3
+    cell_height = height // 3
+    for row in range(3):
+        for col in range(3):
+            center_x = col*cell_width + cell_width // 2
+            center_y = row * cell_height + cell_height // 2
+
+           
+            if board[row][col] == "X":
+                offset = 50
+                pygame.draw.line(screen, red,
+                                 (center_x - offset, center_y - offset),
+                                 (center_x + offset, center_y + offset),
+                                 line_width)
+                pygame.draw.line(screen, red,
+                                 (center_x + offset, center_y - offset),
+                                 (center_x - offset, center_y + offset),
+                                 line_width)
+
+            elif board[row][col] == "O":
+                pygame.draw.circle(screen, black, (center_x, center_y), 60, line_width)
+def get_cell(pos):
+    x, y = pos
+    row = y // (height // 3)
+    col = x // (width // 3)
+    return row, col
+
+def check_winner():
+    for row in board:
+        if row[0] == row[1] == row[2] and row[0] != "":
+            return row[0]
+    for col in range(3):
+        if board[0][col] == board[1][col] == board[2][col] and board[0][col] != "":
+            return board[0][col]
+    if board[0][0] == board[1][1] == board[2][2] and board[0][0] != "":
+        return board[0][0]
+    if board[0][2] == board[1][1] == board[2][0] and board[0][2] != "":
+        return board[0][2]
+    return None
+
+def minimax(board, depth, is_maximiring):
+    winner = check_winner()
+    if winner == computer:
+        return 1
+    elif winner == player:
+        return -1
+    elif all(board[row][col] != "" for row in range(3) for col in range(3)):
+        return 0
+    
+    if is_maximiring:
+        best_score = -float("inf")
+        for row in range(3):
+            for col in range(3):
+                if board[row][col] == "":
+                    board[row][col] = computer
+                    score = minimax(board, depth + 1, False)
+                    board[row][col]=""
+                    best_score = max(score, best_score)
+        return best_score
+    else:
+        best_score = float("inf")
+        for row in range(3):
+            for col in range(3):
+                if board[row][col] == "":
+                    board[row][col] = player
+                    score = minimax(board, depth+1, True)
+                    board[row][col] = ""
+                    best_score = min(score, best_score)
+        return best_score
+
+def best_move():
+    best_score = -float("inf")
+    move = None
+    for row in range(3):
+        for col in range(3):
+            if board[row][col] == "":
+                board[row][col] = computer
+                score = minimax(board, 0, False)
+                board[row][col] = ""
+                if score > best_score:
+                    best_score = score
+                    move = (row, col)
+    if move:
+        board[move[0]][move[1]] = computer
+
+running = True
+game_over = False
+
+while running:
+    draw_board()
+    draw_marks()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            row, col = get_cell(pygame.mouse.get_pos())
+            if board[row][col] == "" and check_winner() is None:
+                board[row][col] = player
+
+                if check_winner() is None and any("" in r for r in board):
+                    best_move()
+    pygame.display.flip()
+
+    winner = check_winner()
+    if winner and not game_over:
+        print(f"{winner} 勝利！")
+        game_over = True
+        pygame.time.wait(3000)
+    elif all(board[row][col] != "" for row in range(3) for col in range(3)) and not game_over:
+        print("平手！")
+        game_over = True
+        pygame.time.wait(3000)
+
+
+    
+pygame.time.wait(3000)
+pygame.quit()
