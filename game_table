@@ -1,0 +1,174 @@
+import pygame
+import random
+import sys
+import math
+from pygame.locals import QUIT
+
+pygame.init()
+font = pygame.font.Font(None, 48)
+
+dis_width = 800
+dis_height = 600
+dis = pygame.display.set_mode((dis_width, dis_height))
+pygame.display.set_caption("table tenic")
+
+clock = pygame.time.Clock()
+blue = (0, 0, 205)
+white = (255, 255, 255)
+yellow = (255, 215, 0)
+
+paddle_width = 10
+paddle_height = 80
+paddle_x = dis_width - 20
+paddle1_x = 10
+paddle_y = (dis_height - paddle_height) / 2
+paddle1_y = (dis_height - paddle_height) / 2
+
+ball_radius = 8
+ball_x = dis_width / 2
+ball_y = dis_height / 2
+base_speed = 5
+player_score = 0
+ai_score = 0
+
+def Button(dis, position, text, button_size=(200, 50)):
+    left, top = position
+    bwidth, bheight = button_size
+    pygame.draw.rect(dis, (100, 100, 100), (left, top, bwidth, bheight))
+    pygame.draw.line(dis, (150, 150, 150), (left, top), (left + bwidth, top), 5)
+    pygame.draw.line(dis, (150, 150, 150), (left, top), (left, top + bheight), 5)
+    pygame.draw.line(dis, (50, 50, 50), (left, top + bheight), (left + bwidth, top + bheight), 5)
+    pygame.draw.line(dis, (50, 50, 50), (left + bwidth, top), (left + bwidth, top + bheight), 5)
+    font_small = pygame.font.Font(None, 30)
+    text_render = font_small.render(text, True, (255, 235, 205))
+    dis.blit(text_render, (left + 50, top + 10))
+    return pygame.Rect(left, top, bwidth, bheight)
+
+def reset_ball():
+    global ball_x, ball_y, ball_dx, ball_dy, base_speed
+    ball_x = dis_width / 2
+    ball_y = dis_height / 2
+    base_speed = 5
+    angle = random.uniform(-math.pi / 4, math.pi / 4)
+    ball_dx = base_speed * math.cos(angle) * random.choice([-1, 1])
+    ball_dy = base_speed * math.sin(angle)
+
+reset_ball()
+def draw_border():
+    pygame.draw.rect(dis, white, (2, 2, 800 - 3 - 5, 670 - 6 - 68), 4)
+def draw_paddle(x, y):
+    pygame.draw.rect(dis, white, [x, y, paddle_width, paddle_height])
+
+def draw_ball(x, y):
+    pygame.draw.circle(dis, yellow, [int(x), int(y)], ball_radius)
+
+def draw_line():
+    pygame.draw.line(dis, white, [dis_width // 2, 0], [dis_width // 2, dis_height - 11], 2)
+
+def show_menu():
+    while True:
+        dis.fill((30, 30, 30))
+        title = font.render("table tenic!!", True, white)
+        dis.blit(title, (dis_width//2 - 100, 80))
+
+        button1 = Button(dis, (dis_width//2 - 100, 200), "1 Player")
+        button2 = Button(dis, (dis_width//2 - 100, 280), "2 Player")
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if button1.collidepoint(event.pos):
+                    return 1
+                elif button2.collidepoint(event.pos):
+                    return 2
+
+        pygame.display.update()
+        clock.tick(60)
+
+def gameLoop(mode=1):
+    global ball_x, ball_y, ball_dx, ball_dy, base_speed
+    global paddle_y, paddle1_y, player_score, ai_score
+
+    reset_ball()
+    paddle_y = (dis_height - paddle_height) / 2
+    paddle1_y = (dis_height - paddle_height) / 2
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+        if ai_score > 11 or player_score > 10:
+            pygame.quit()
+            sys.exit()
+            
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP] and paddle1_y > 0:
+            paddle1_y -= 5
+        if keys[pygame.K_DOWN] and paddle1_y < dis_height - paddle_height:
+            paddle1_y += 5
+
+
+
+        if mode == 2:
+            if keys[pygame.K_w] and paddle_y > 0:
+                paddle_y -= 5
+            if keys[pygame.K_s] and paddle_y < dis_height - paddle_height:
+                paddle_y += 5
+        else:
+            if ball_y < paddle_y + paddle_height / 2 and paddle_y > 0:
+                paddle_y -= 2
+            elif ball_y > paddle_y + paddle_height / 2 and paddle_y < dis_height - paddle_height:
+                paddle_y += 2
+
+        ball_x += ball_dx
+        ball_y += ball_dy
+
+        if ball_y <= ball_radius or ball_y >= dis_height - ball_radius:
+            ball_dy *= -1
+
+        #反彈角度
+        if (paddle1_x < ball_x - ball_radius < paddle1_x + paddle_width and
+            paddle1_y < ball_y < paddle1_y + paddle_height):
+            offset = (ball_y - (paddle1_y + paddle_height / 2)) / (paddle_height / 2)
+            angle = offset * (math.pi / 4)
+            base_speed += 0.2
+            ball_dx = base_speed * math.cos(angle)
+            ball_dy = base_speed * math.sin(angle)
+
+        if (paddle_x < ball_x + ball_radius < paddle_x + paddle_width and
+            paddle_y < ball_y < paddle_y + paddle_height):
+            offset = (ball_y - (paddle_y + paddle_height / 2)) / (paddle_height / 2)
+            angle = offset * (math.pi / 4)
+            base_speed += 0.2
+            ball_dx = -base_speed * math.cos(angle)
+            ball_dy = base_speed * math.sin(angle)
+
+        if ball_x < 0:
+            ai_score += 1
+            reset_ball()
+        elif ball_x > dis_width:
+            player_score += 1
+            reset_ball()
+
+        dis.fill(blue)
+        draw_paddle(paddle_x, paddle_y)
+        draw_paddle(paddle1_x, paddle1_y)
+        draw_ball(ball_x, ball_y)
+        draw_line()
+        draw_border()
+
+        score_text = font.render(f"player1: {player_score}", True, white)
+        ai_text = font.render(f"foe: {ai_score}", True, white)
+        dis.blit(score_text, (dis_width // 4 - 80, 20))
+        dis.blit(ai_text, (dis_width * 3 // 4 - 40, 20))        
+
+        pygame.display.update()
+        clock.tick(60)
+
+mode = show_menu()
+gameLoop(mode)
