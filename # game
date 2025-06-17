@@ -1,5 +1,6 @@
 import pygame
 import sys
+import time
 
 pygame.init()
 
@@ -116,7 +117,8 @@ while running:
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            pygame.quit()
+            sys.exit()
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             row, col = get_cell(pygame.mouse.get_pos())
