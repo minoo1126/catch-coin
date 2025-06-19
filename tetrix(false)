@@ -1,0 +1,516 @@
+
+import random 
+import pygame
+import time
+from pygame.locals import *
+from drew import * 
+
+class Box(object):
+   def __init__( self, pygame, canvas, name, rect, color):
+        self.pygame = pygame
+        self.canvas = canvas
+        self.name = name
+        self.rect = rect
+        self.color = color
+
+        self.visible = True
+   def update(self):
+        if(self.visible):
+            self.pygame.draw.rect( self.canvas, self.color, self.rect)
+#encoding: utf-8
+BRICK_DROP_RAPIDLY = 0.05 #加快速度
+
+BRICK_DOWN_SPEED_MAX = 0.5 #普通速度
+
+canvas_width = 800
+canvas_height = 600
+
+#顏色
+block = (0, 0, 0)
+red = (255, 0, 0)
+green = (0, 255, 0)
+blue = (0, 0, 255)
+gray = (20, 31, 23)
+white = (255, 255, 255)
+gray_block    = (20,31,23)
+gray_green    = (0, 255, 0)
+
+brick_dict = { #方塊
+    "10":(1,5,9,13),"11":(4,5,6,7),
+    "20":(4,8,9,13),"21":(2,5,6,9),
+    "30":(9,10,12,13),"31":(4,8,9,13),
+    "40":(1,2,5,9),"41":(4,5,6,10),"42":(2,6,9,10),"43":(1,5,9,10),
+    "50":(1,2,6,10),"51":(5,6,7,9),"52":(3,5,6,7),"53":(2,6,10,11),
+    "60":(5,8,9,10),"61":(5,8,9,10),"62":(8,9,10,13),"63":(5,9,10,13),
+    "70":(1,2,5,6),
+}
+
+#主遊戲地圖
+bricks_array = []
+for i in range(10): #10 * 20 的遊戲畫面
+    bricks_array.append([0] * 20)
+#方塊陣列(4*4)
+bricks = []
+for i in range(4): 
+    bricks.append([0] * 4)
+
+#下一個方塊陣列(4*4)因為要預覽圖所以也要設定
+bricks_next = []
+for i in range(4):
+    bricks_next.append([0] * 4)
+
+#下一個方塊圖形陣列(4*4)
+bricks_next_object = []
+for i in range(4):
+    bricks_next_object.append([0]*4)
+
+#磚塊數量統計(用於計算分數)
+bricks_list = []
+for i in range(10):
+    bricks_list.append([0] * 20)
+
+container_x = 3
+container_y = -4
+
+debug_message = False
+game_over = False
+
+
+brick_down_speed = BRICK_DOWN_SPEED_MAX
+
+brick_id = 1
+brick_state = 0
+
+brick_next_id = 1
+
+lines_number_max = 0
+lines_number = 0
+
+game_mode = 0
+
+def showFont( text, x, y, color):
+    global canvas
+    text = font.render(text, True, color)
+    canvas.blit(text, (x,y)) #把文字圖像貼到canva
+
+#取得磚塊是第幾號與哪種型態
+def getBrickIndex(brickId, state):
+    global brick_dict
+
+    #組合字串
+    brickKey = str(brickId) + str(state)
+
+    #回傳方塊陣列
+    return brick_dict[brickKey]
+
+def transformToBricks(brickId, state):
+    global bricks
+
+    #清除右邊可視圖方塊陣列
+    for x in range(4):
+        for y in range(4):
+            bricks[x][y] = 0
+
+    #取得磚塊是第幾號與哪種型態
+    p_brick = getBrickIndex(brickId, state)
+
+    #轉換方塊到方塊陣列
+    for i in range(4):
+        bx = int(p_brick[i] % 4) #計算i在X的第幾個
+        by = int(p_brick[i] / 4) #計算i在Y的第幾行
+        bricks[bx][by] = brickId
+
+    #印出訊息
+    for y in range(4):
+        s = ""
+        for x in range(4):
+            s = s + str(bricks[x][y]) + ","
+        print(s)
+
+def ifCopyToBricksArray():
+    global bricks, bricks_array
+    global container_x, container_y
+
+    posX = 0
+    posY = 0
+
+    for x in range(4):
+        for y in range(4):
+            if (bricks[x][y] != 0): #如果目前的格子有方塊
+                posX = container_x + x # 將此格子轉換成遊戲地圖上的實際座標
+                posY = container_y + y
+                if(posX >= 0 and posY >= 0): #確保這個座標正確
+                    try:
+                        if (bricks_array[posX][posY] != 0):#如果這個位子上有方塊
+                            return False #回傳不能放
+                    except: #如果超出邊界
+                        return False #也回傳false
+    return True #如果可以放入則回傳True如果可以放入則回傳True
+
+def copyToBricksArray():
+    #同上(ifCopyToBricksArray)
+    global bricks, bricks_array
+    global container_x, container_y
+
+    posX = 0
+    posY = 0
+
+    for x in range(4):
+        for y in range(4):
+            if(bricks[x][y] != 0):
+                posX = container_x + x
+                posY = container_y + y
+                if(posX >= 0 and posY >= 0):
+                    bricks_array[posX][posY] = bricks[x][y]
+
+def resetGame():
+    global  BRICK_DOWN_SPEED_MAX
+    global bricks_array, bricks, lines_number, lines_number_max
+    
+    #清除磚塊陣列(將所有都請空)
+    for x in range(10): #一列有10格
+        for y in range(20): #一行有20格
+            bricks_array[x][y] = 0 #初始化方塊
+
+    #清除右邊方塊陣列 
+    for x in range(4):
+        for y in range(4):
+            bricks[x][y] = 0
+
+    #初始化磚塊下降速度
+    brick_down_speed = BRICK_DOWN_SPEED_MAX
+
+    #最大連線數
+    if(lines_number > lines_number_max):
+        lines_number_max = lines_number
+    
+    #連線數
+    lines_number = 0
+
+def ifClearBrick():
+    pointNum = 0
+    lineNum = 0
+    for y in range(20):   #檢查每一行
+        for x in range(10):  #檢查每一格
+            if (bricks_array[x][y] > 0): #如果格子有方塊
+                pointNum = pointNum + 1  #計入pointNum
+            if (pointNum == 10):         #如果都被填滿=滿行
+                for i in range(10):      #總共有10格
+                    lineNum = lineNum + 1   #如消除會+1
+                    bricks_array[i][y] = 9  #準備要消除
+        pointNum = 0
+    return lineNum
+
+def updateNextBricks(brickId):
+    global bricks_next
+
+    #清除右邊舊的方塊陣列
+    for y in range(4):
+        for x in range(4):
+            bricks_next[x][y] = 0
+    
+    #取得磚塊是第幾號與型態0
+    pBrick = getBrickIndex(brickId, 0)
+
+    #轉換磚塊進轉換磚塊進方塊陣列
+    for i in range(4):
+        bx = int(pBrick[i] % 4) #取得陣列規模(第幾行)
+        by = int(pBrick[i] / 4) #取得陣列規模(第幾列)
+        bricks_next[bx][by] = brickId
+
+    #右邊可視窗背景更新
+    background_bricks_next.update() 
+    
+    #更新可視窗磚塊圖
+    pos_y = 52 #y的起始座標
+    for y in range(4): #右邊可視窗陣列
+        pos_x = 592 #x的起始座標
+        for x in range(4): #右邊可視窗陣列
+            if(bricks_next[x][y] != 0): #判斷右邊視窗是否有磚塊
+                bricks_next_object[x][y].rect[0] = pos_x #代表物件的x座標
+                bricks_next_object[x][y].rect[1] = pos_y #代表物件的y座標
+                bricks_next_object[x][y].update() #更新顯示方式
+            pos_x = pos_x + 28 #每一個方塊都是20*20 畫完一格向右移動20px
+        pos_y = pos_y + 28 #接著繼續畫下一個
+
+def brickNew():
+    global game_over, container_x, container_y, brick_id, brick_next_id, brick_state
+    global lines_number, game_mode
+    #先檢查高度有沒有超過遊戲介面，如果超過遊戲結束，如果沒超過則遊戲繼續
+    game_over = False
+    if(container_y < 0):   #如果方塊超過遊戲介面(y)
+        game_over = True   #遊戲就會結束
+
+    #當方塊兩個碰在一起的時候，讓掉下來的方塊不要在繼續往下，而是待在交接處
+    container_y = container_y - 1
+    #把方塊固定在場地上(因為container_x,container_y可以把磚塊轉換為實際座標)
+    copyToBricksArray()
+
+    #判斷方塊是否集滿一列
+    lines = ifClearBrick() // 10
+    if (lines > 0):
+        #消除連線數量累加
+        lines_number = lines_number + lines
+        #如果連成一條則消除方塊
+        game_mode = 1
+    
+    #初始方塊位置
+    container_x = 3
+    container_y = -4
+
+    #現在出現的方塊
+    brick_id = brick_next_id 
+
+    #下個出現的方塊
+    #方塊編號(1~7)
+    brick_next_id = random.randint(1, 7)
+
+    #初始方塊狀態
+    brick_state = 0
+
+    #GameOver
+    if (game_over):
+        #重新開始遊戲
+        resetGame()
+
+def clearBrick():
+    global bricks_array
+
+    #一列一列檢查是否需要消除方塊
+    temp = 0
+    for x in range(10): #檢查橫向格子
+       for i in range(19): #檢查垂直格子(每個都有向下沉)
+           for y in range(20): #檢查所有y軸
+               if (bricks_array[x][y] == 9): #如果這一格等於9會被標記要消除的方塊
+                   if (y > 0):#嘗試讓他下沉(利用bubble sort)
+                       temp = bricks_array[x][y - 1]
+                       bricks_array[x][y-1] = bricks_array[x][y]
+                       bricks_array[x][y] = temp
+                       y = y - 1
+           bricks_array[x][0] = 0
+
+pygame.init()
+pygame.display.set_caption("俄羅斯方塊")
+
+clock = pygame.time.Clock()
+canvas = pygame.display.set_mode((canvas_width, canvas_height))
+
+
+print(pygame.font.get_fonts())
+font = pygame.font.SysFont("simhei", 20)
+
+#將繪圖方塊放入陣列(主遊戲)
+for y in range(20):
+    for x in range(10):
+        bricks_list[x][y] = Box(pygame, canvas, "brick_x_" + str(x) + "_y_" + str(y), [ 0, 0, 26, 26], gray_block)
+
+#將繪圖方塊放入陣列(右邊預覽圖)
+for y in range(4):
+    for x in range(4):
+        bricks_next_object[x][y] = Box(pygame, canvas, "brick_next_x_" + str(x) + "_y_" + str(y), [ 0, 0, 26, 26], gray_block)
+
+#背景區塊
+background = Box(pygame, canvas, "background", [ 278, 18, 282, 562], gray)
+
+#背景區塊
+background_bricks_next = Box(pygame, canvas, "background_bricks_next", [590, 50, 114, 114], gray)
+
+# 方塊編號(1~7).
+brick_next_id = random.randint(1, 7)
+#產生新方塊
+brickNew()
+time_temp = time.time()
+time_now = 0
+running = True
+while running:
+    time_now = time_now + (time.time() - time_temp)
+    time_temp = time.time()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                running = False
+            elif event.key == pygame.K_d:
+                debug_message = not debug_message
+            elif event.key == pygame.K_UP and game_mode == 0:
+                #左右兩邊界不能旋轉
+                if (container_x == 8): #此方塊水平位置在第9格
+                    break      #不可以旋轉
+
+                #判斷磚塊L1, 反轉L, I型磚塊 
+                if (brick_id == 1 or brick_id == 2 or brick_id == 3):
+                    #如果I型太靠左或是太靠右
+                    if (brick_id == 1):
+                        if (container_x < 0 or container_x == 7):
+                            #就禁止旋轉
+                            break
+                    
+                    #旋轉方塊
+                    brick_state = brick_state + 1
+                    #因為方塊型態只有兩個所以當方塊轉到第二個型態時下一次轉就轉回第一型態
+                    if(brick_state > 1):
+                        brick_state = 0
+                    transformToBricks(brick_id, brick_state)
+                    if (not ifCopyToBricksArray()):
+                        brick_state = brick_state - 1
+                        if (brick_state < 0):
+                            brick_state = 1 
+                #當方塊為N1, N2, T型
+                elif (brick_id == 4 or brick_id == 5 or brick_id == 6):
+                    brick_state = brick_state + 1
+                    #因為方塊型態有四個所以當型態為第四種型態時下一次就轉回第一型態
+                    if (brick_state > 3):
+                        brick_state = 0
+                    
+                    #轉換定義方塊到方塊陣列
+                    transformToBricks(brick_id, brick_state)
+                    #碰到磚塊
+                    if (not ifCopyToBricksArray()):  #檢查目前方塊可不可以放入遊戲,如果無法放入則直接回傳false
+                        #如果試圖旋轉，但撞牆禍根下面的方塊重疊，就還原上一個狀態
+                        brick_state = brick_state - 1
+                        if (brick_state < 0): 
+                            brick_state = 3   
+            elif event.key ==  pygame.K_DOWN and game_mode == 0:
+                brick_down_speed = BRICK_DROP_RAPIDLY
+            #向左移動
+            elif event.key == pygame.K_LEFT and game_mode == 0:
+                container_x = container_x - 1 #嘗試向左邊移動一格
+                if (container_x < 0): #檢查是不是已經移動到最左邊了
+                    if (container_x == -1):
+                    #目前第0欄的方塊是否有東西，bricks[0][0] ~ bricks[0][3] 表示第0欄, 第 0 ~ 3 列的位置
+                        if (bricks[0][0] != 0 or bricks[0][1] != 0 or bricks[0][2] != 0 or bricks[0][3] != 0):
+                            container_x = container_x + 1 #如果超過邊界則退回原本地點
+                
+                    elif (container_x == -2): #檢查是不是已經移動到最左邊了
+                        if (bricks[1][0] != 0 or bricks[1][1] != 0 or bricks[1][2] != 0 or bricks[1][3] != 0):
+                            container_x = container_x + 1 #如果超過邊界則退回原本地點
+                
+                    else:
+                        container_x = container_x + 1
+                #碰到方塊
+                if (not ifCopyToBricksArray()):
+                    container_x = container_x + 1
+                
+            # 向右移動
+            elif event.key == pygame.K_RIGHT and game_mode == 0:
+                container_x = container_x + 1
+                if (container_x > 6): #主遊戲畫面(20*10, 0~9)可視窗(4*4, 0~3) 9-3=6 所以6剛好會對其邊界
+                    if (container_x == 7):# 到7會超過邊界
+                        #目前第3欄的方塊是否有東西，bricks[3][0] ~ bricks[3][3] 表示第3欄, 第 0 ~ 3 列的位置
+                        if (bricks[3][0] != 0 or bricks[3][1] != 0 or bricks[3][2] != 0 or bricks[3][3] != 0):
+                            container_x = container_x - 1;                        
+
+                    elif (container_x == 8):
+                        if (bricks[2][0] != 0 or bricks[2][1] != 0 or bricks[2][2] != 0 or bricks[2][3] != 0):
+                            container_x = container_x - 1                        
+                    else:
+                        container_x = container_x 
+                    #如果會與場上磚塊重疊
+                    if (not ifCopyToBricksArray()):#如果目前的方塊不能放入就把剛剛的移動退回來
+                        container_x = container_x - 1
+
+        # 判斷放開按鈕
+        if event.type == pygame.KEYUP:
+            #快速下降
+            if event.key == pygame.K_DOWN:
+                #恢復正常下降速度
+                brick_down_speed = BRICK_DROP_RAPIDLY
+    #清除畫面
+    canvas.fill(block)
+
+    #遊戲中
+    if (game_mode == 0):
+        #處理磚塊下降
+        if (time_now >= brick_down_speed):
+            #往下降
+            container_y = container_y + 1
+            #碰到磚塊
+            if (not ifCopyToBricksArray()):
+                #產生新塊
+                brickNew()
+            #轉換定義方塊到方塊陣列
+            transformToBricks(brick_id, brick_state)
+            #清除時間
+            time_now = 0
+    # 清除磚塊
+    elif (game_mode == 1):
+        # 清除方塊
+        clearBrick()
+        # 遊戲中
+        game_mode = 0
+        # 轉換定義方塊到方塊陣列.
+        transformToBricks(brick_id, brick_state)
+    updateNextBricks(brick_next_id)
+    pos_y = 20
+    background.update()
+    for y in range(20):
+        pos_x = 280
+        for x in range(10):
+            if(bricks_array[x][y] != 0):
+                bricks_list[x][y].rect[0] = pos_x
+                bricks_list[x][y].rect[1] = pos_y
+                bricks_list[x][y].update()
+            pos_x = pos_x + 28
+        pos_y = pos_y + 28
+
+    #更新方塊
+    for y in range(4):
+        for x in range(4):
+            if (bricks[x][y] != 0): #檢查該位置是否為目前有效方塊的一部分(是否為俄羅斯方塊)
+                posX = container_x + x #如果是了話將俄羅斯方塊的方塊加上遊戲介面的座標(x)
+                posY = container_y + y #如果是了話將俄羅斯方塊的方塊加上遊戲介面的座標(y)
+                if (posX >= 0 and posY >= 0): #當遊戲介面的座標成立
+                    bricks_list[posX][posY].rect[0] = (posX * 28) + 280 #就會把位置轉換成畫面上的像素位置畫出來(x)
+                    bricks_list[posX][posY].rect[1] = (posY * 28) + 20  #就會把位置轉換成畫面上的像素位置畫出來(y)
+                    bricks_list[posX][posY].update() #更新畫面
+
+    #除厝訊息
+    if (debug_message):
+        #更新容器
+        str_x = ""
+        pos_x = 15
+        pos_y = 20
+        for y in range(20):
+            str_x = ""
+            for x in range(10):
+                str_x = str_x + str(bricks_array[x][y]) + " "
+            showFont( str_x, pos_x, pos_y, red)
+            pos_y = pos_y + 28
+
+        #更新方塊
+        posX = 0
+        posY = 0
+        for y in range(4): #4*4的矩陣(方塊)
+            str_x = "" #空字串是用來存在每一行的顯示內容
+            for x in range(4): #4*4的矩陣(方塊)
+                if (bricks[x][y] != 0): #檢查該位置有沒有方塊, 如果沒有了話
+                    posX = container_x + x #將下降中的方塊加上下降中的方塊加上遊戲中的座標
+                    posY = container_y + y #將下降中的方塊加上下降中的方塊加上遊戲中的座標
+                    if (posX >= 0 and posY >= 0): #當遊戲中的介面成立
+                        str_x = str_x + str(bricks[x][y]) + " "
+                else:
+                    str_x = str_x + "  " #將內容以文字方式畫在畫面上
+            pos_x = 15 + (container_x * 26) #紀錄方塊在主畫面上的x座標
+            pos_y = 20 + (posY * 28) #目前畫到第幾列
+            showFont( str_x, pos_x, pos_y, white)
+    # 顯示訊息
+    showFont ( u"下次出現的方塊", 500, 10, gray)
+    showFont ( u"最大連線數", 500, 190, gray)
+    showFont ( str(int(lines_number_max)), 500, 220, gray)
+    showFont ( u"本局連線數", 500, 200, gray)
+    showFont (str(int(lines_number)), 500, 290, gray)
+
+    #顯示FPS
+    #除錯訊息
+
+    if(debug_message):
+        showFont ( u"FPS:" + str(clock.get_fps()), 6, 0, gray_green)
+
+    pygame.display.update()
+    clock.tick(60)
+pygame.quit()
+quit()
+
+    
