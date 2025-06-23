@@ -1,0 +1,119 @@
+import pygame
+import sys
+import random
+
+empty = 0
+black = 1
+white = 2
+black_color = (0,0,0)
+white_color = (255, 255, 255)
+board_size = 15
+grid_size = 40
+border_width = 4 
+
+class RenjuBoard:
+    def __init__(self):
+        #檢查是否有空的，有空的就下在空格子
+        self._board = [[empty] * board_size for _ in range(board_size)]
+    #重製棋盤
+    #處理每一列為甚麼不用col是因為只要檢查每一列並把每一列清空
+    def reset(self):
+        for row in range(board_size):
+            self._board[row] = [empty] * board_size
+    #下棋
+    def move(self, row, col, is_black):
+        #檢查這個格子是不是空的
+        if self._board[row][col] == empty:
+            self._board[row][col] = black if is_black else white
+            #if is_black = true 就會return black(黑旗) 如果false 就會return white(白旗) 
+            return True
+        return False
+    
+    #繪製棋盤與其子
+    def draw(self, screen):
+        for i in range(1, board_size + 1):
+            pygame.draw.line(screen, black_color, [grid_size, i*grid_size], [board_size * grid_size, i * grid_size], 1)
+            pygame.draw.line(screen, black_color, [i*grid_size, grid_size], [i * grid_size, board_size * grid_size], 1)
+    #畫外框
+        pygame.draw.rect(screen, black_color, [grid_size -border_width, grid_size - border_width, (board_size - 0.8) * grid_size, (board_size - 0.8) * grid_size], border_width)
+
+        pygame.draw.circle(screen, black_color, [grid_size * 8, grid_size * 8], 5, 0)
+        for x in [grid_size * 4, grid_size * 12]:
+            for y in [grid_size * 4, grid_size * 12]:
+                pygame.draw.circle(screen, black_color, [x, y], 3, 0)
+        
+        for row in range(board_size):
+            for col in range(board_size):
+                if self._board[row][col] != empty:
+                    color = black_color if self._board[row][col] == black else white_color
+                    pos = [grid_size * (col + 1), grid_size * (row + 1)]
+                    pygame.draw.circle(screen, color, pos, 10, 0)
+    
+    def is_win(board):
+        directions = [(1, 0),(0, 1),(1, 1),(1, -1)]
+        for row in range(board_size):
+            for col in range(board_size):
+                player = board._board[row][col]
+                if player == empty:
+                    continue
+                for dr, dc in directions:
+                    count = 1
+                    r, c = row+dr , col+dc
+                    while 0 <= board_size and 0 <= c < board_size and board._board[r][c] == player:
+                        count += 1
+                        r += dr
+                        c += dc
+                    if count >= 5:
+                        return player
+        return None
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((grid_size * (board_size + 2), grid_size * (board_size + 2)))
+    pygame.display.set_caption("五子棋 Renju")
+    font = pygame.font.SysFont("Microsoft JhengHei", 24)
+
+    board = RenjuBoard()
+    is_black_turn = True
+    winner = None
+    running = True
+
+    while running:
+        screen.fill((200, 160, 100))
+        board.draw(screen)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
+
+            if event.type == pygame.MOUSEBUTTONDOWN and not winner:
+                x, y = pygame.mouse.get_pos()
+                col = (x + grid_size // 2) // grid_size - 1
+                row = (y + grid_size // 2) // grid_size - 1
+
+                if 0 <= row < board_size and 0 <= col < board_size:
+                    if board.move(row, col, is_black_turn):
+                        winner = board.is_win()
+                        is_black_turn = not is_black_turn
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    board.reset()
+                    is_black_turn = True
+                    winner = None
+
+        # 顯示結果
+        if winner:
+            text = "黑棋獲勝！" if winner == black else "白棋獲勝！"
+            text_render = font.render(text + " 按 R 鍵重新開始", True, (255, 0, 0))
+            screen.blit(text_render, (grid_size, grid_size * (board_size + 1)))
+
+        pygame.display.update()
+
+    pygame.quit()
+    sys.exit()
+
+
+if __name__ == "__main__":
+    main()
+    
