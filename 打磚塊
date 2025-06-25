@@ -1,0 +1,131 @@
+import pygame
+import random
+
+# 顏色設定
+block = (0, 0, 0)
+white = (255, 255, 255)
+
+# 畫面大小
+dis_width = 800
+dis_height = 600
+dis = pygame.display.set_mode((dis_width, dis_height))
+pygame.display.set_caption("打磚塊之進階")
+
+# 遊戲狀態
+game_mode = 0
+brick_num = 0
+
+# 板子設定
+paddle_x = 100
+paddle_y = dis_height - 40
+paddle_w = 100
+paddle_h = 10
+paddle_rect = pygame.Rect(paddle_x, paddle_y, paddle_w, paddle_h)
+
+# 球設定
+ball_pos = [paddle_x, paddle_y]
+ball_radius = 8
+dx = 5
+dy = -5
+
+# 磚塊清單
+brick_list = []
+
+# 碰撞判斷
+def isCollision(x, y, boxRect):
+    if (x >= boxRect[0] and x <= boxRect[0] + boxRect[2] and
+        y >= boxRect[1] and y <= boxRect[1] + boxRect[3]):
+        return True
+    return False
+
+# 遊戲重置
+def resetGame():
+    global game_mode, brick_num, dx, dy, ball_pos
+    brick_list.clear()
+    brick_x = 40
+    brick_y = 20
+    brick_h = 0
+    for i in range(180):
+        if i % 18 == 0:
+            brick_w = 0
+            brick_h += 30
+        r = random.randint(100, 200)
+        g = random.randint(100, 200)
+        b = random.randint(100, 200)
+        brick = {
+            "rect": pygame.Rect(brick_w + brick_x, brick_h + brick_y, 40, 20),
+            "color": (r, g, b),
+            "visible": True
+        }
+        brick_list.append(brick)
+        brick_w += 42  # 水平間距
+    brick_num = len(brick_list)
+    game_mode = 0
+    dx = 5
+    dy = -5
+    ball_pos[0] = paddle_rect.x + paddle_rect.width // 2
+    ball_pos[1] = paddle_rect.y - ball_radius
+
+# 初始化
+pygame.init()
+clock = pygame.time.Clock()
+resetGame()
+
+# 遊戲主迴圈
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                running = False
+        elif event.type == pygame.MOUSEMOTION:
+            paddle_rect.x = pygame.mouse.get_pos()[0] - paddle_rect.width // 2
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if game_mode == 0:
+                game_mode = 1
+
+    dis.fill(block)
+
+    # 磚塊碰撞與繪製
+    for brick in brick_list:
+        if brick["visible"] and isCollision(ball_pos[0], ball_pos[1], brick["rect"]):
+            brick["visible"] = False
+            brick_num -= 1
+            dy = -dy
+            if brick_num <= 0:
+                resetGame()
+                break
+        if brick["visible"]:
+            pygame.draw.rect(dis, brick["color"], brick["rect"])
+
+    # 球與板子碰撞
+    if isCollision(ball_pos[0], ball_pos[1], paddle_rect):
+        dy = -dy
+
+    # 等待開球
+    if game_mode == 0:
+        ball_pos[0] = paddle_rect.x + paddle_rect.width // 2
+        ball_pos[1] = paddle_rect.y - ball_radius
+    else:
+        # 移動球
+        ball_pos[0] += dx
+        ball_pos[1] += dy
+
+        # 邊界檢查
+        if ball_pos[0] <= ball_radius or ball_pos[0] >= dis_width - ball_radius:
+            dx = -dx
+        if ball_pos[1] <= ball_radius:
+            dy = -dy
+        if ball_pos[1] >= dis_height - ball_radius:
+            game_mode = 0
+
+    # 畫球與板子
+    pygame.draw.circle(dis, white, ball_pos, ball_radius)
+    pygame.draw.rect(dis, white, paddle_rect)
+
+    pygame.display.update()
+    clock.tick(60)
+
+pygame.quit()
