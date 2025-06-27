@@ -1,0 +1,186 @@
+import pygame
+import random
+import sqlite3
+pygame.init()
+
+WIDTH = 800
+HEIGHT = 600
+BLOCK_SIZE = 30
+BOARD_WIDTH = (WIDTH-270) // BLOCK_SIZE
+BOARD_HEIGHT = (HEIGHT) // BLOCK_SIZE 
+
+
+BLACK = (0, 0, 0)
+WHITE = (50, 50, 50)
+CYAN = (0, 255, 255)
+YELLOW = (255, 255, 0)
+MAGENTA = (255, 0, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 165, 0)
+
+SHAPES = [
+    [[1, 1, 1, 1]],
+    [[1, 1], [1, 1]],
+    [[1, 1, 0], [0, 1, 1]],
+    [[0, 1, 1], [1, 1, 0]],
+    [[1, 0, 0], [1, 1, 1]],
+    [[0, 0, 1], [1, 1, 1]],
+    [[0, 1, 0], [1, 1, 1]]
+]
+
+shape_color = [CYAN, YELLOW, MAGENTA, GREEN, RED, BLUE, ORANGE]
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Tetrix")
+
+#初始化Tetris的遊戲畫面
+board = [[0] * BOARD_WIDTH for _ in range(BOARD_HEIGHT)]
+
+class Brick:
+    def __init__(self):
+        self.shape = random.choice(SHAPES)
+        self.color = random.choice(shape_color)
+        self.color_index = shape_color.index(self.color) + 1
+        self.x = BOARD_WIDTH // 2 - len(self.shape[0]) // 2
+        self.y = 0
+    def rotate(self):
+        self.shape = [list(row) for row in zip(*self.shape[::-1])]
+
+    
+    def is_collision(self, offset_x=0, offset_y=0):
+       for row in range(len(self.shape)):
+          for col in range(len(self.shape[0])):
+             if self.shape[row][col] == 1:
+                px = self.x + col + offset_x
+                py = self.y + row + offset_y
+
+                # 超出邊界
+                if px < 0 or px >= BOARD_WIDTH or py >= BOARD_HEIGHT:
+                    return True
+
+                # 撞到現有的方塊
+                if py >= 0 and board[py][px] != 0:
+                    return True
+       return False
+
+    def lock_brick(self):
+       for row in range(len(self.shape)):
+          for col in range(len(self.shape[0])):
+             if (self.shape[row][col] == 1):
+                px = self.x + col
+                py = self.y + row
+                if (0 <= py < BOARD_HEIGHT and 0 <= px < BOARD_WIDTH):
+                    board[py][px] = self.color_index
+
+
+#畫圖出來
+def draw_board():
+    for row in range(BOARD_HEIGHT):
+        for col in range(BOARD_WIDTH):
+            if board[row][col] != 0:
+                color = shape_color[board[row][col] - 1]
+                pygame.draw.rect(screen, color,
+                    (col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
+                
+
+    # 畫橫線（橫的格子）
+    for row in range(BOARD_HEIGHT):
+        pygame.draw.line(screen, WHITE, (0, row * BLOCK_SIZE), (WIDTH, row * BLOCK_SIZE))
+
+    # 畫直線（直的格子）
+    for col in range(BOARD_WIDTH):
+        pygame.draw.line(screen, WHITE, (col * BLOCK_SIZE, 0), (col * BLOCK_SIZE, HEIGHT))
+
+def draw_shape(brick, offset_x = 0, offset_y = 0):
+    for row in range(len(brick.shape)):
+        for col in range(len(brick.shape[0])):
+            if brick.shape[row][col] == 1:
+                px = (brick.x + col + offset_x) * BLOCK_SIZE
+                py = (brick.y + row + offset_y) * BLOCK_SIZE
+                pygame.draw.rect(screen, brick.color, (px, py, BLOCK_SIZE, BLOCK_SIZE))
+                pygame.draw.rect(screen, WHITE, (px, py, BLOCK_SIZE, BLOCK_SIZE), 1)
+def clear_lines():
+    cleared = 0
+    new_board = []
+    for row in board:
+        if all(row):
+            cleared += 1
+        else:
+            new_board.append(row)
+    while len(new_board) < BOARD_HEIGHT:
+        new_board.insert(0, [0] * BOARD_WIDTH)
+    for i in range(BOARD_HEIGHT):
+        board[i] = new_board[i]
+    return cleared * 100
+
+def show_message(text):
+    font = pygame.font.SysFont("None", 70)
+    text_surface = font.render(text, True, (255, 255, 0))
+    rect = text_surface.get_rect(center = (WIDTH // 2, HEIGHT // 2))
+    screen.blit(text_surface, rect)
+    pygame.display.update()
+    pygame.time.delay(2000)
+
+def main():
+        current_shape = Brick()
+        score = 0
+        clock = pygame.time.Clock()
+        fall_time = 0
+        fall_speed = 0.3
+
+        running = True
+        while running:
+            
+            dt = clock.tick(60) / 1000
+            #用來計算自動下落的時間
+            fall_time += dt
+            
+            #如果累積的時間大於預計下落的間隔，則下一次降落
+            if fall_time > fall_speed:
+                fall_time = 0
+                #如果磚塊不會撞到下邊界了話
+                if not current_shape.is_collision(0, 1):
+                    #磚塊就可以下移一格
+                    current_shape.y += 1
+                else:
+                    current_shape.lock_brick()
+                    score += clear_lines()
+                    current_shape = Brick()
+                    #如果沒有空間放這個方塊了話
+                    if current_shape.is_collision(0,0):
+                        show_message("GAME OVER")
+                        running = False
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                   running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
+                        if not current_shape.is_collision(-1, 0):
+                           current_shape.x -= 1
+                    elif event.key == pygame.K_RIGHT:
+                        if not current_shape.is_collision(1, 0):
+                            current_shape.x += 1
+                    elif event.key == pygame.K_DOWN:
+                        if not current_shape.is_collision(0, 1):
+                            current_shape.y += 1
+                    elif event.key == pygame.K_UP:
+                        current_shape.rotate()
+                        if current_shape.is_collision(0, 0):
+                            for _ in range(3):
+                                current_shape.rotate()
+                    elif event.key == pygame.K_TAB:
+                        while not current_shape.is_collision(0, 1):
+                            current_shape.y += 1
+                        current_shape.lock_brick()
+                        score += clear_lines()
+                        current_shape = Brick()
+            screen.fill(BLACK)
+            draw_board()
+            draw_shape(current_shape)
+            pygame.display.update()
+
+if __name__ == "__main__":
+    main()
+                        
