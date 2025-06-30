@@ -1,0 +1,93 @@
+import random
+import pygame
+import sys
+
+pygame.init()
+
+dis_width = 600
+dis_height = 600
+cell_size = 10
+board_x = dis_width // cell_size
+board_y = dis_height // cell_size
+
+font = pygame.font.Font(None, 74)
+
+dis = pygame.display.set_mode((dis_width, dis_height))
+pygame.display.set_caption("snow")
+
+people_pos = [dis_width // 2, 10]
+
+ball_list = []
+ball_num = 8
+for _ in range(ball_num):
+    ball_pos = [random.randint(0, board_x) * 10,
+                random.randint(0, board_y) * 10]
+    ball_list.append(ball_pos)
+
+hinder_list = []
+hinder_num = 8
+for _ in range(hinder_num):
+    hinder_pos = [random.randint(0, board_x) * 10,
+                  random.randint(0, board_y) * 10]
+    hinder_list.append(hinder_pos)
+
+clock = pygame.time.Clock()
+score = 0
+running = True
+while running:
+    pygame.font.init()
+    dis.fill((255, 255, 255))
+
+    # 移動人物
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]:
+        people_pos[0] -= 3
+    if keys[pygame.K_RIGHT]:
+        people_pos[0] += 3
+    people_pos[0] = max(5, min(dis_width - 25, people_pos[0]))
+
+    # 畫人物
+    pygame.draw.rect(dis, (0, 0, 0), (people_pos[0], people_pos[1], 20, 20))
+    #圖形碰撞偵測，如果人物的x, y的矩形(下一個在第64行)
+    people_rect = pygame.Rect(people_pos[0], people_pos[1], 20, 20)
+
+    # 處理 hinder（綠色球）
+    for i, pos in enumerate(hinder_list):
+        pos[1] -= 1
+        hinder_rect = pygame.Rect(pos[0], pos[1], 10, 10)
+        if pos[1] < 0 or people_rect.colliderect(hinder_rect):
+            if people_rect.colliderect(hinder_rect):
+                score = score - 1
+            new_x = random.randrange(0, board_x) * 10
+            new_y = dis_height + random.randint(0, 100)
+            hinder_list[i] = [new_x, new_y]
+    for pos in hinder_list:
+        pygame.draw.circle(dis, (0, 255, 0), (pos[0] + 5, pos[1] + 5), 5)
+
+    # 處理 ball（紅色球）與碰撞
+    for i, pos in enumerate(ball_list):
+        ball_rect = pygame.Rect(pos[0], pos[1], 10, 10)
+        pos[1] -= 1
+        #如果球超過邊界或是人物碰到球體時就生產新的球
+        if pos[1] < 0 or people_rect.colliderect(ball_rect):
+            if people_rect.colliderect(ball_rect):
+                score = score + 1
+            new_x = random.randrange(0, board_x) * 10
+            new_y = dis_height + random.randint(0, 100)
+            ball_list[i] = [new_x, new_y]
+
+    for pos in ball_list:
+        pygame.draw.circle(dis, (255, 0, 0), (pos[0] + 5, pos[1] + 5), 5)
+
+    score_text = font.render(f"Score: {score}", True, (0, 255, 255))
+    dis.blit(score_text ,(10, 10))
+    # 處理退出事件
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+    pygame.display.update()
+    clock.tick(50)
+
+pygame.quit()
