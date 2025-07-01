@@ -1,0 +1,232 @@
+import pygame
+import sys
+import random
+# 初始化 Pygame
+pygame.init()
+
+
+# 遊戲畫面尺寸
+width = 600
+height = 600
+cell_size = 30
+board_x = width // cell_size
+board_y = height // cell_size
+
+# 建立畫面
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("射擊遊戲")
+font = pygame.font.Font(None, 75)
+
+# 飛機初始位置與子彈設定
+fly_pos = [width // 2, height - 40]
+bullet_list = []
+bullet_speed = 5
+
+# 敵人生成時間設定
+spawn_time = 0
+spawn_interval = 90  # 每 90 frame 生成一個敵人（約每 1.5 秒）
+
+# ----------- 食物類別 -----------
+class Food:
+    def __init__(self, x, y, color, speed, hp):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.speed = speed
+        self.hp = hp
+
+    def move(self):
+        self.y += self.speed
+
+    def draw(self, screen):
+        pygame.draw.ellipse(screen, self.color, (self.x + 15, self.y + 15, 15, 15))
+
+    def get_ellipse(self):
+        return pygame.Rect(self.x, self.y, 30, 30)
+
+# 食物種類（顏色、移動速度、回復HP量）
+food_type = [
+    {"color": (187, 84, 56), "speed": 1, "hp": 1},
+    {"color": (150, 150, 150), "speed": 2, "hp": 2},
+    {"color": (78, 100, 40), "speed": 3, "hp": 3}
+]
+
+# 食物列表
+food_list = []
+food_num = 2  # 同時場上最多 2 個食物
+for _ in range(food_num):
+    et = random.choice(food_type)
+    x = random.randint(0, board_x) * 30
+    y = random.randint(0, board_y) * 30
+    food_list.append(Food(x, y, et["color"], et["speed"], et["hp"]))
+
+# ----------- 敵人類別 -----------
+class Enemy:
+    def __init__(self, x, y, color, speed, hp, score):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.speed = speed
+        self.hp = hp
+        self.score = score
+
+    def move(self):
+        self.y += self.speed
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, (self.x + 15, self.y + 15, 15, 15))
+
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, 30, 30)
+
+# 敵人種類（顏色、速度、血量）
+enemy_type = [
+    {"color": (0, 0, 0), "speed": 1, "HP": 1, "score": 1},
+    {"color": (255, 0, 0), "speed": 2, "HP": 2, "score": 2},
+    {"color": (0, 0, 255), "speed": 3, "HP": 3, "score": 3}
+]
+
+# 初始化敵人
+enemy_list = []
+enemy_num = 5
+for _ in range(enemy_num):
+    et = random.choice(enemy_type)
+    x = random.randint(0, board_x) * 30
+    y = random.randint(0, board_y) * 30
+    enemy_list.append(Enemy(x, y, et["color"], et["speed"], et["HP"], et["score"]))
+
+# ----------- 遊戲主要變數 -----------
+running = True
+score = 0
+HP = 3
+invincible_timer = 0
+clock = pygame.time.Clock()
+fly_rect = pygame.Rect(fly_pos[0], fly_pos[1], 30, 30)
+
+# ----------- 遊戲主迴圈 -----------
+while running:
+
+    screen.fill((255, 255, 255))  # 清空畫面背景
+
+    # 移動控制
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]:
+        fly_pos[0] -= 10
+    elif keys[pygame.K_RIGHT]:
+        fly_pos[0] += 10
+    fly_pos[0] = max(5, min(width - 35, fly_pos[0]))  # 邊界限制
+
+    # 畫出飛機
+    pygame.draw.rect(screen, (255, 145, 156), (fly_pos[0], fly_pos[1], 30, 30))
+    fly_rect = pygame.Rect(fly_pos[0], fly_pos[1], 30, 30)  # 更新飛機位置矩形
+
+    # 子彈移動與畫出
+    for bullet in bullet_list:
+        bullet[1] -= bullet_speed
+    bullet_list = [b for b in bullet_list if b[1] > 0]  # 移除超出畫面的子彈
+    for bullet in bullet_list:
+        pygame.draw.circle(screen, (255, 255, 0), (bullet[0] + 5, bullet[1] + 5), 5)
+
+    # 敵人移動與繪製
+    for enemy in enemy_list:
+        enemy.move()
+        enemy.draw(screen)
+
+    bullets_to_remove = []
+    enemy_to_remove = []
+
+    # 食物移動與繪製
+    for food in food_list:
+        food.move()
+        food.draw(screen)
+
+    food_to_remove = []
+
+    # 子彈與敵人碰撞檢查
+    for b_index, bullet in enumerate(bullet_list):
+        bullet_rect = pygame.Rect(bullet[0], bullet[1], 10, 10)
+        for e_index, enemy in enumerate(enemy_list):
+            enemy_rect = pygame.Rect(enemy.x, enemy.y, 30, 30)
+            if bullet_rect.colliderect(enemy_rect):
+                enemy.hp -= 1
+                bullets_to_remove.append(b_index)
+                if enemy.hp <= 0:
+                    enemy_to_remove.append(e_index)
+                    score += enemy.score
+                break
+
+    # 移除被擊中的敵人與子彈
+    for i in sorted(bullets_to_remove, reverse=True):
+        del bullet_list[i]
+    for i in sorted(enemy_to_remove, reverse=True):
+        del enemy_list[i]
+
+    # 敵人與飛機碰撞（扣血 + 無敵時間）
+    if invincible_timer > 0:
+        invincible_timer -= 1
+
+    for enemy in enemy_list:
+        if enemy.get_rect().colliderect(fly_rect):
+            if invincible_timer == 0:
+                HP -= 1
+                invincible_timer = 120  # 無敵 2 秒
+                if HP <= 0:
+                    showFont = font.render("game over", True, (125, 254, 145))
+                    screen.blit(showFont, (150, 250))
+                    pygame.display.update()
+                    pygame.time.delay(2000)
+                    running = False
+
+    # 飛機吃到食物（回血 + 移除食物 + 生成新食物）
+    for f_index, food in enumerate(food_list):
+        food_rect = pygame.Rect(food.x, food.y, 30, 30)
+        if fly_rect.colliderect(food_rect):
+            HP = min(5, HP + food.hp)  # 回血不能超過 5
+            food_to_remove.append(f_index)
+            # 只補一個新食物
+            if len(food_list) < food_num:
+                et = random.choice(food_type)
+                x = random.randint(0, board_x) * 30
+                food_list.append(Food(x, -30, et["color"], et["speed"], et["hp"]))
+
+    # 吃掉食物後補新的（食物數量始終維持 food_num）
+    for i in sorted(food_to_remove, reverse=True):
+        del food_list[i]
+    while len(food_list) < food_num:
+        et = random.choice(food_type)
+        x = random.randint(0, board_x) * 30
+        food_list.append(Food(x, -30, et["color"], et["speed"], et["hp"]))
+
+
+    # 事件處理（發射子彈）
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_TAB:
+                bullet_x = fly_pos[0] + 10
+                bullet_y = fly_pos[1]
+                bullet_list.append([bullet_x, bullet_y])
+
+    # 新敵人生成
+    spawn_time += 1
+    if spawn_time >= spawn_interval:
+        spawn_time = 0
+        et = random.choice(enemy_type)
+        x = random.randint(0, board_x) * 30
+        enemy_list.append(Enemy(x, -30, et["color"], et["speed"], et["HP"], et["score"]))
+
+    # 顯示血量與分數
+    show_HP = font.render(f"HP: {HP}", True, (158, 110, 124))
+    score_text = font.render(f"Score: {score}", True, (0, 255, 255))
+    screen.blit(score_text, (10, 10))
+    screen.blit(show_HP, (10, 60))
+
+    pygame.display.update()
+    clock.tick(60)
+
+# 離開遊戲
+pygame.quit()
+quit()
