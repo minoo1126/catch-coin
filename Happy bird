@@ -1,0 +1,144 @@
+import pygame
+import random
+import os
+
+pygame.init()
+
+width = 400
+height = 600
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("Happy Bird")
+clock = pygame.time.Clock()
+FPS = 60
+
+# 顏色（目前沒使用）
+white = (255, 255, 255)
+
+# 圖片資源路徑
+image_path = {
+    "bird": "C:/Users/rita.liu/Pictures/bird/bird.png",
+    "background": "C:/Users/rita.liu/Pictures/bird/background.png",
+    "pipeUp": "C:/Users/rita.liu/Pictures/bird/brickU.png",
+    "pipeDown": "C:/Users/rita.liu/Pictures/bird/brickD.png"
+}
+
+# 載入圖片
+images = {}
+for name, path in image_path.items():
+    if os.path.exists(path):
+        img = pygame.image.load(path)
+        images[name] = img
+    else:
+        print(f"路徑錯誤無法導入：{path}")
+        pygame.quit()
+        exit()
+
+# 圖片引用
+bird_img = images["bird"]
+background_img = images["background"]
+pipeUp_img = images["pipeUp"]
+pipeDown_img = images["pipeDown"]
+
+# 遊戲常數
+gravity = 0.5
+jump_height = -10
+pipe_gap = 150
+pipe_speed = 3
+
+# 小鳥類別
+class Bird:
+    def __init__(self):
+        self.x = 50
+        self.y = height // 2
+        self.velocity = 0
+        self.img = bird_img
+        self.rect = self.img.get_rect(topleft=(self.x, self.y))
+    
+    def jump(self):
+        self.velocity = jump_height
+    
+    def update(self):
+        self.velocity += gravity
+        self.y += self.velocity
+        self.rect.y = self.y
+
+    def drew(self, screen):
+        screen.blit(self.img, self.rect)
+
+# 管道類別
+class Pipe:
+    def __init__(self):
+        self.x = width
+        self.height = random.randint(150, 400)
+        self.passed = False
+        self.top_rect = pipeUp_img.get_rect(bottomleft=(self.x, self.height - pipe_gap // 2))
+        self.bottom_rect = pipeDown_img.get_rect(topleft=(self.x, self.height + pipe_gap // 2))
+    
+    def update(self):
+        self.x -= pipe_speed
+        self.top_rect.x = self.bottom_rect.x = self.x
+    
+    def drew(self, screen):
+        screen.blit(pipeUp_img, self.top_rect)
+        screen.blit(pipeDown_img, self.bottom_rect)
+
+# 初始化遊戲狀態
+bird = Bird()
+pipes = []
+score = 0
+font = pygame.font.SysFont("Arial", 35)
+pipe_timer = 0
+running = True
+
+# 主遊戲迴圈
+while running:
+    clock.tick(FPS)
+    screen.blit(background_img, (0, 0))
+
+    # 處理事件
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+            bird.jump()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            bird.jump()
+
+    # 更新小鳥
+    bird.update()
+
+    # 產生管道
+    pipe_timer += 1
+    if pipe_timer >= 90:
+        pipes.append(Pipe())
+        pipe_timer = 0
+
+    # 更新管道 & 記分
+    for pipe in pipes:
+        pipe.update()
+    for pipe in pipes[:]:
+        if pipe.x + pipeUp_img.get_width() < 0:
+            pipes.remove(pipe)
+        if not pipe.passed and pipe.x < bird.x:
+            pipe.passed = True
+            score += 1
+
+    # 碰撞檢查
+    for pipe in pipes:
+        if bird.rect.colliderect(pipe.top_rect) or bird.rect.colliderect(pipe.bottom_rect):
+            running = False
+    if bird.y <= 0 or bird.y >= height:
+        running = False
+
+    # 繪圖
+    for pipe in pipes:
+        pipe.drew(screen)
+    bird.drew(screen)
+
+    # 分數顯示
+    score_text = font.render(f"Score: {score}", True, (255, 255, 255))
+    screen.blit(score_text, (10, 10))
+
+    pygame.display.update()
+
+pygame.quit()
