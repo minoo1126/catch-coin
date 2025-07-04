@@ -1,0 +1,140 @@
+import pygame
+import sys
+from pygame.locals import QUIT, KEYDOWN
+
+# 初始化程式
+pygame.init()
+font = pygame.font.SysFont("Arial", 75)
+
+# 記錄棋子的位置與顏色
+stones = []
+
+# 畫面大小
+width = 840
+height = 840
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("五子棋")
+
+# 找到滑鼠點擊位置對應的最近交叉點
+def find_pos(mx, my):
+    for row in range(20, 840, 40):
+        for col in range(20, 840, 40):
+            L1 = row - 20
+            L2 = row + 20
+            R1 = col - 20
+            R2 = col + 20
+            if L1 <= mx <= L2 and R1 <= my <= R2:
+                return row, col
+    return mx, my  # 找不到就傳回原座標（理論上不會用到）
+
+# 初始化棋盤 21x21 都設為 0（0 表示空格，1 表示白棋，2 表示黑棋）
+board = [[0 for _ in range(21)] for _ in range(21)]
+
+# 勝利判斷函式
+def check_win(board, x, y, player):
+    directions = [
+        (1, 0),  # 水平
+        (0, 1),  # 垂直
+        (1, 1),  # 右斜
+        (1, -1)  # 左斜
+    ]
+    for dx, dy in directions:
+        count = 1  # 自己一顆棋子
+
+        # 正方向檢查
+        i = 1
+        while True:
+            nx = x + dx * i
+            ny = y + dy * i
+            if 0 <= nx < 21 and 0 <= ny < 21 and board[ny][nx] == player:
+                count += 1
+                i += 1
+            else:
+                break
+
+        # 反方向檢查
+        i = 1
+        while True:
+            nx = x - dx * i
+            ny = y - dy * i
+            if 0 <= nx < 21 and 0 <= ny < 21 and board[ny][nx] == player:
+                count += 1
+                i += 1
+            else:
+                break
+
+        # 如果五顆連線就返回 True
+        if count >= 5:
+            return True
+    return False  # 所有方向都沒五顆就返回 False
+
+# 畫線顏色與初始變數
+line_color = (0, 0, 0)
+mode = 1  # 玩家輪流：1 表白棋，2 表黑棋
+winner = 0  # 儲存勝利者
+running = True
+
+# 遊戲主迴圈
+while running:
+    screen.fill((238, 154, 73))  # 填入棋盤底色（木色）
+
+    # 畫棋盤線
+    for i in range(20, 840, 40):
+        if i == 20 or i == 820:
+            pygame.draw.line(screen, line_color, [i, 20], [i, 820], 4)
+            pygame.draw.line(screen, line_color, [20, i], [820, i], 4)
+        else:
+            pygame.draw.line(screen, line_color, [i, 20], [i, 820], 2)
+            pygame.draw.line(screen, line_color, [20, i], [820, i], 2)
+
+    # 畫棋盤中央圓點
+    pygame.draw.circle(screen, line_color, (width // 2, height // 2), 10)
+
+    # 處理事件（如關閉或點擊）
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        # 處理下棋事件（沒有人贏的情況下才能繼續下）
+        if winner == 0 and event.type == pygame.MOUSEBUTTONDOWN:
+            mx, my = pygame.mouse.get_pos()         # 取得滑鼠點擊座標
+            gx, gy = find_pos(mx, my)               # 轉換成最近交叉點
+            grid_x = (gx - 20) // 40                # 對應棋盤二維座標（x）
+            grid_y = (gy - 20) // 40                # 對應棋盤二維座標（y）
+
+            # 如果該格是空的
+            if board[grid_y][grid_x] == 0:
+                board[grid_y][grid_x] = mode        # 設定棋盤陣列
+                stones.append(((gx, gy), mode))     # 加入畫面上的棋子座標
+
+                # 檢查是否勝利
+                if check_win(board, grid_x, grid_y, mode):
+                    winner = mode  # 儲存勝利者
+                else:
+                    mode = 2 if mode == 1 else 1  # 換下一位玩家
+
+    # 畫出所有已下的棋子
+    for (gx, gy), color_mode in stones:
+        color = (255, 255, 255) if color_mode == 1 else (0, 0, 0)
+        pygame.draw.circle(screen, color, (gx, gy), 10)
+
+    # 畫游標位置的提示框
+    mx, my = pygame.mouse.get_pos()
+    gx, gy = find_pos(mx, my)
+    pygame.draw.rect(screen, [0, 229, 230], [gx - 22, gy - 22, 44, 44], 2, 1)
+
+    # 顯示勝利者
+    if winner != 0:
+        if winner == 1:
+            msg = "white win!"
+        else:
+            msg = "black win!"
+        text = font.render(msg, True, (255, 0, 0))
+        text_rect = text.get_rect(center=(width // 2, height // 2))
+        screen.blit(text, text_rect)
+
+    pygame.display.update()  # 畫面更新
+
+# 離開遊戲
+pygame.quit()
+exit()
