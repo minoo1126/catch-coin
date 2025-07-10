@@ -1,39 +1,32 @@
-import pygame, random, sys
-from pygame.locals import *
+import pygame
+import random
+import sys
 
-# 遊戲視窗大小
 window_x = 640
 window_y = 480
 
-# 遊戲參數
-FPS = 30                 # 遊戲幀率
-revealSpeed = 5          # 揭示速度
-starevealSpeed = 2       # 遮蓋速度
-boxSize = 40             # 方塊大小
-gapSize = 10             # 方塊間的間隔
-boardWidth = 10          # 棋盤寬（X方向方塊數）
-boardHeight = 7          # 棋盤高（Y方向方塊數）
+FPS = 30
+boxSize = 40
+gapSize = 10
+boardWidth = 10
+boardHeight = 7
 
-# 遊戲畫面與邊框的距離 (置中計算)
 xMargin = int((window_x - (boardWidth * (boxSize + gapSize))) / 2)
 yMargin = int((window_y - (boardHeight * (boxSize + gapSize))) / 2)
 
-# 如果遊戲運行成功，確保方塊數量是偶數
-assert (boardWidth * boardHeight) % 2 == 0
+assert (boardHeight * boardWidth) % 2 == 0
 
-# 顏色定義
-Gray = (100, 100, 100)
-Navyblue = (50, 50, 100)
-White = (255, 255, 255)
-Red = (255, 0, 0)
-Green = (0, 255, 0)
-Blue = (0, 0, 255)
-Yellow = (255, 255, 0)
-Orange = (255, 128, 0)
-Purple = (255, 0, 255)
-Cyan = (0, 255, 255)
+gray = (100, 100, 100)
+navyblue = (50, 50, 100)
+white = (255, 255, 255)
+red = (255, 0, 0)
+green = (0, 255, 0)
+blue = (0, 0, 255)
+yellow = (255, 255, 0)
+orange = (255, 128, 0)
+purple = (255, 0, 255)
+cyan = (0, 255, 255)
 
-# 形狀類型（字串表示）
 Donut = 'donut'
 Square = 'square'
 Diamond = 'diamond'
@@ -41,282 +34,173 @@ Lines = 'lines'
 Oval = 'oval'
 
 pygame.font.init()
-font_1 = pygame.font.Font(None, 60)
+font = pygame.font.Font(None, 60)
 
-# 背景色與方塊顏色
-bgColor = Navyblue
-lightbgColor = Gray
-boxColor = White
-highlightColor = Cyan
+bgColor = navyblue
+lightbgColor = gray
+boxColor = white
+highlightColor = cyan
 
-# 所有顏色與形狀組合（數量足夠完成整個棋盤）
-allColor = (Red, Green, Blue, Yellow, Orange, Purple, Cyan)
+allColor = (red, green, blue, yellow, orange, purple, cyan)
 allShape = (Donut, Square, Diamond, Lines, Oval)
 
-# 確認顏色*形狀*2足夠覆蓋整個棋盤方塊數
-assert (len(allColor) * len(allShape) * 2 >= boardHeight * boardWidth)
-
-# 產生全未揭開的方塊狀態資料
 def generateRevealedBoxesData(val):
-    # 用空集合紀錄已有多少的方塊已被揭開
-    revealedBoxes = []
-    # 以boardHeight為行數遍歷
-    for y in range(boardHeight):
-        # 記錄該行資料
-        row = []
-        for x in range(boardWidth):
-            row.append(val)
-        revealedBoxes.append(row)
-    return revealedBoxes
+    return [[val for _ in range(boardWidth)] for _ in range(boardHeight)]
 
-# 獲取所有圖標，並隨機分配成遊戲棋盤
-def getRandomizedBoard():
+def getRandomizeBoard():
     icons = []
     for color in allColor:
         for shape in allShape:
-            # 紀錄形狀與顏色
             icons.append((shape, color))
-    # 先打亂並合併與重新分配
+
     random.shuffle(icons)
-    # 因為全部需要 boardWidth * boardHeight / 2 個配對圖案
-    numIconUsed = int(boardWidth * boardHeight / 2)
-    # 乘以 2 是因為要一對一對完成
-    icons = icons[:numIconUsed] * 2
-    # 再把順序打亂一次
+    numIconShape = int(boardWidth * boardHeight / 2)
+    icons = icons[:numIconShape] * 2
     random.shuffle(icons)
 
     board = []
-    # 用 boardHeight 為行數生成二維陣列
     for y in range(boardHeight):
         row = []
         for x in range(boardWidth):
-            # 取得須添加的數值
             row.append(icons[0])
-            # 添加並刪除，避免重複添加
             del icons[0]
-        # 展示所有的圖案
         board.append(row)
     return board
 
-# 遊戲開始動畫，將方塊一組組揭開再蓋上
-def startGameAnimation(board):
-    # 等待0.5秒
-    pygame.time.wait(500)
-    # 產生全部尚未揭開狀態
-    coveredBoxes = generateRevealedBoxesData(False)
-    # 產生所有方塊位置列表
-    boxes = []
-    for y in range(boardHeight):
-        for x in range(boardWidth):
-            boxes.append((y, x))
-    # 打亂方塊順序
-    random.shuffle(boxes)
-    # 把方塊切成指定大小的群組(此處15個一組)
-    boxGroups = _splitIntoGroupsOf(15, boxes)
-
-    # 先畫出完整棋盤（全部蓋住）
-    drawBoard(board, coveredBoxes)
-    # 逐組揭開、遮蓋動畫
-    for boxGroup in boxGroups:
-        revealBoxesAnimation(board, boxGroup)
-        coverBoxerAnimation(board, boxGroup)
-
-# 把列表分成多個固定大小的子列表（群組）
-def _splitIntoGroupsOf(groupSize, theList):
-    return [theList[i:i + groupSize] for i in range(0, len(theList), groupSize)]
-
-# 透過鼠標像素座標，獲取對應的方塊座標（x,y）
-def getBoxAtPixel(x, y):
-    # 遍歷所有方塊位置
-    for box_y in range(boardHeight):
-        for box_x in range(boardWidth):
-            # 取得該方塊左上角座標
-            left, top = _leftTopCoordsOfBox(box_x, box_y)
-            # 用 pygame 矩形來判斷滑鼠是否點中方塊
-            boxRect = pygame.Rect(left, top, boxSize, boxSize)
-            if boxRect.collidepoint(x, y):
-                # 返回該方塊索引
-                return (box_x, box_y)
-    # 沒有對應方塊則返回 (None, None)
-    return (None, None)
-
-# 計算方塊左上角在畫面上的實際像素座標
 def _leftTopCoordsOfBox(box_x, box_y):
     left = box_x * (boxSize + gapSize) + xMargin
     top = box_y * (boxSize + gapSize) + yMargin
     return (left, top)
 
-# 方塊遮蓋動畫
-def coverBoxerAnimation(board, boxesToCover):
-    # 用boxSize+starevealSpeed是因為要知道方塊完全被蓋住，用starevealSpeed
-    for coverage in range(0, boxSize + starevealSpeed, starevealSpeed):
-        _drawBoxCovers(board, boxesToCover, coverage)
+def getBoxAtPixel(x, y):
+    for box_x in range(boardWidth):
+        for box_y in range(boardHeight):
+            left, top = _leftTopCoordsOfBox(box_x, box_y)
+            boxRect = pygame.Rect(left, top, boxSize, boxSize)
+            if boxRect.collidepoint(x, y):
+                return (box_x, box_y)
+    return (None, None)
 
-# 方塊揭開動畫
-def revealBoxesAnimation(board, boxesToReveal):
-    # 從遮蓋滿到逐漸揭開，故步進為 -revealSpeed
-    for coverage in range(boxSize, -1, -revealSpeed):
-        _drawBoxCovers(board, boxesToReveal, coverage)
+def getColorAndShape(board, box_x, box_y):
+    return board[box_y][box_x]
 
-# 繪製方塊遮蓋效果
-def _drawBoxCovers(board, boxes, coverage):
-    for box in boxes:
-        left, top = _leftTopCoordsOfBox(box[1], box[0])  # 注意 (x,y) 反轉索引
-        pygame.draw.rect(screen, bgColor, (left, top, boxSize, boxSize))
-        shape, color = getShapeAndColor(board, box[0], box[1])
-        _drawIcon(shape, color, box[1], box[0])
-        if coverage > 0:
-            # 用白色遮蓋方塊達到遮蓋動畫效果
-            pygame.draw.rect(screen, boxColor, (left, top, coverage, boxSize))
-    pygame.display.update()
-    FpsClock.tick(FPS)
-
-# 獲取指定方塊的形狀與顏色
-def getShapeAndColor(board, box_y, box_x):
-    return board[box_y][box_x][0], board[box_y][box_x][1]
-
-# 繪製圖示（各種形狀）
 def _drawIcon(shape, color, box_x, box_y):
-    quater = int(boxSize * 0.25)
+    quarter = int(boxSize * 0.25)
     half = int(boxSize * 0.5)
-
     left, top = _leftTopCoordsOfBox(box_x, box_y)
 
     if shape == Donut:
-        # 繪製外圓和內圓形成甜甜圈
-        pygame.draw.circle(screen, color, (left + half, top + half), half - 5)
-        pygame.draw.circle(screen, bgColor, (left + half, top + half), quater - 5)
+        pygame.draw.circle(window, color, (left + half, top + half), half - 5)
+        pygame.draw.circle(window, bgColor, (left + half, top + half), quarter - 5)
     elif shape == Square:
-        # 繪製方形
-        pygame.draw.rect(screen, color, (left + quater, top + quater, boxSize - half, boxSize - half))
+        pygame.draw.rect(window, color, (left + quarter, top + quarter, boxSize - half, boxSize - half))
     elif shape == Diamond:
-        # 繪製菱形（多邊形）
-        pygame.draw.polygon(screen, color, [(left + half, top), (left + boxSize - 1, top + half), (left + half, top + boxSize - 1), (left, top + half)])
+        pygame.draw.polygon(window, color, [(left + half, top), (left + boxSize - 1, top + half),
+                                            (left + half, top + boxSize - 1), (left, top + half)])
     elif shape == Lines:
-        # 繪製斜線圖案
         for i in range(0, boxSize, 10):
-            pygame.draw.line(screen, color, (left, top + i), (left + i, top))
-            pygame.draw.line(screen, color, (left + i, top + boxSize), (left + boxSize, top + i))
+            pygame.draw.line(window, color, (left, top + i), (left + i, top))
+            pygame.draw.line(window, color, (left + i, top + boxSize), (left + boxSize, top + i))
     elif shape == Oval:
-        # 繪製橢圓形
-        pygame.draw.ellipse(screen, color, (left, top + quater, boxSize, half))
+        pygame.draw.ellipse(window, color, (left, top + quarter, boxSize, half))
 
-# 繪製整個遊戲棋盤
 def drawBoard(board, revealed):
-    # 先用行遍歷，再用列遍歷
-    for box_y in range(boardHeight):
-        for box_x in range(boardWidth):
+    for box_x in range(boardWidth):
+        for box_y in range(boardHeight):
             left, top = _leftTopCoordsOfBox(box_x, box_y)
-            # 判斷該方塊是否已揭開
             if not revealed[box_y][box_x]:
-                # 未揭開的方塊用白色填充
-                pygame.draw.rect(screen, boxColor, (left, top, boxSize, boxSize))
+                pygame.draw.rect(window, boxColor, (left, top, boxSize, boxSize))
             else:
-                # 已揭開則畫出圖示
-                shape, color = getShapeAndColor(board, box_y, box_x)
+                shape, color = getColorAndShape(board, box_x, box_y)
                 _drawIcon(shape, color, box_x, box_y)
 
-# 繪製滑鼠選中的方塊高亮框
 def drawHighlight(box_x, box_y):
     left, top = _leftTopCoordsOfBox(box_x, box_y)
-    pygame.draw.rect(screen, highlightColor, (left - 5, top - 5, boxSize + 10, boxSize + 10), 4)
+    pygame.draw.rect(window, highlightColor, (left - 5, top - 5, boxSize + 10, boxSize + 10))
 
-# 判斷是否全部方塊都已揭開（玩家勝利條件）
+def revealBoxesAnimation(board, boxes):
+    for box in boxes:
+        shape, color = getColorAndShape(board, box[1], box[0])
+        _drawIcon(shape, color, box[1], box[0])
+    pygame.display.update()
+    pygame.time.wait(500)
+
+def coverBoxesAnimation(board, boxes):
+    for box in boxes:
+        left, top = _leftTopCoordsOfBox(box[1], box[0])
+        pygame.draw.rect(window, boxColor, (left, top, boxSize, boxSize))
+    pygame.display.update()
+    pygame.time.wait(500)
+
 def hasWon(revealedBoxes):
     for row in revealedBoxes:
         if False in row:
             return False
     return True
 
-# 遊戲勝利的閃爍動畫
 def gameWonAnimation(board):
-    coveredBoxes = generateRevealedBoxesData(True)
-    color1 = lightbgColor
-    color2 = bgColor
+    window.fill(lightbgColor)
+    _print_text(font, 200, 200, "You Win!", cyan)
+    pygame.display.update()
+    pygame.time.wait(1500)
 
-    for i in range(5):
-        color1, color2 = color2, color1
-        screen.fill(color1)
-        drawBoard(board, coveredBoxes)
-        _print_text(font_1, window_x / 6 + 50, window_y / 8, "You Win!")
-        pygame.display.update()
-        pygame.time.wait(500)
-
-# 在畫面上繪製文字
-def _print_text(font, x, y, text, color=(255,255,255)):
-    imgText = font.render(text, True, color)
-    screen.blit(imgText, (x, y))
+def _print_text(font, x, y, text, color):
+    img = font.render(text, True, color)
+    window.blit(img, (x, y))
 
 def main():
-    global FpsClock, screen
+    global window, FpsClock
     pygame.init()
+    window = pygame.display.set_mode((window_x, window_y))
+    pygame.display.set_caption("Match Puzzle")
     FpsClock = pygame.time.Clock()
-    screen = pygame.display.set_mode((window_x, window_y))
-    pygame.display.set_caption("Memory Puzzle")
 
     mouse_x = 0
     mouse_y = 0
 
-    # 產生遊戲棋盤與揭開狀態
-    mainBoard = getRandomizedBoard()
+    mainBoard = getRandomizeBoard()
     revealedBoxes = generateRevealedBoxesData(False)
 
     firstSelection = None
-    screen.fill(bgColor)
-    startGameAnimation(mainBoard)
+    window.fill(bgColor)
 
     while True:
         mouseClicked = False
-        screen.fill(bgColor)
+        window.fill(bgColor)
         drawBoard(mainBoard, revealedBoxes)
 
-        keys = pygame.key.get_pressed()
         for event in pygame.event.get():
-            # 按ESC或關閉視窗退出遊戲
-            if event.type == QUIT or keys[K_ESCAPE]:
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 pygame.quit()
                 sys.exit()
-            elif event.type == MOUSEMOTION:
+            elif event.type == pygame.MOUSEMOTION:
                 mouse_x, mouse_y = event.pos
-            elif event.type == MOUSEBUTTONUP:
+            elif event.type == pygame.MOUSEBUTTONUP:
                 mouse_x, mouse_y = event.pos
                 mouseClicked = True
 
         box_x, box_y = getBoxAtPixel(mouse_x, mouse_y)
         if box_x is not None and box_y is not None:
-            # 如果方塊未揭開，畫出高亮
             if not revealedBoxes[box_y][box_x]:
                 drawHighlight(box_x, box_y)
-            # 如果滑鼠點擊且該方塊未揭開
             if not revealedBoxes[box_y][box_x] and mouseClicked:
                 revealBoxesAnimation(mainBoard, [(box_y, box_x)])
                 revealedBoxes[box_y][box_x] = True
                 if firstSelection is None:
-                    # 記錄第一個被揭開的方塊座標
                     firstSelection = (box_y, box_x)
                 else:
-                    # 取得兩個方塊的形狀與顏色
-                    icon1shape, icon1color = getShapeAndColor(mainBoard, firstSelection[0], firstSelection[1])
-                    icon2shape, icon2color = getShapeAndColor(mainBoard, box_y, box_x)
-                    # 如果兩個方塊不一樣，等待0.5秒後覆蓋回去
+                    icon1shape, icon1color = getColorAndShape(mainBoard, firstSelection[1], firstSelection[0])
+                    icon2shape, icon2color = getColorAndShape(mainBoard, box_x, box_y)
                     if icon1shape != icon2shape or icon1color != icon2color:
                         pygame.time.wait(500)
-                        coverBoxerAnimation(mainBoard, [firstSelection, (box_y, box_x)])
+                        coverBoxesAnimation(mainBoard, [firstSelection, (box_y, box_x)])
                         revealedBoxes[firstSelection[0]][firstSelection[1]] = False
                         revealedBoxes[box_y][box_x] = False
-                    # 若全揭開則顯示勝利動畫並重置遊戲
                     elif hasWon(revealedBoxes):
                         gameWonAnimation(mainBoard)
                         pygame.time.wait(500)
-
-                        mainBoard = getRandomizedBoard()
+                        mainBoard = getRandomizeBoard()
                         revealedBoxes = generateRevealedBoxesData(False)
-
-                        drawBoard(mainBoard, revealedBoxes)
-                        pygame.display.update()
-                        pygame.time.wait(500)
-
-                        startGameAnimation(mainBoard)
                     firstSelection = None
 
         pygame.display.update()
