@@ -1,0 +1,198 @@
+import pygame
+import random
+import sys
+
+window_x = 640
+window_y = 480
+
+FPS = 30
+boxSize = 40
+gapSize = 10
+boardWidth = 10
+boardHeight = 7
+
+xMargin = int((window_x - (boardWidth * (boxSize + gapSize))) / 2)
+yMargin = int((window_y - (boardHeight * (boxSize + gapSize))) / 2)
+
+assert (boardHeight * boardWidth) % 2 == 0
+
+# 顏色定義
+gray = (100, 100, 100)
+navyblue = (50, 50, 100)
+white = (255, 255, 255)
+red = (255, 0, 0)
+green = (0, 255, 0)
+blue = (0, 0, 255)
+yellow = (255, 255, 0)
+orange = (255, 128, 0)
+purple = (255, 0, 255)
+cyan = (0, 255, 255)
+
+# 圖案定義
+Donut = 'donut'
+Square = 'square'
+Diamond = 'diamond'
+Lines = 'lines'
+Oval = 'oval'
+
+pygame.font.init()
+font = pygame.font.Font(None, 60)
+
+# 畫面顏色
+bgColor = navyblue
+lightbgColor = gray
+boxColor = white
+highlightColor = cyan
+
+# 所有形狀與顏色組合
+allColor = (red, green, blue, yellow, orange, purple, cyan)
+allShape = (Donut, Square, Diamond, Lines, Oval)
+
+# 建立隨機配對板
+def getRandomizeBoard():
+    icons = []
+    for color in allColor:
+        for shape in allShape:
+            icons.append((shape, color))
+    random.shuffle(icons)
+    numPairs = (boardWidth * boardHeight) // 2
+    icons = icons[:numPairs] * 2
+    random.shuffle(icons)
+
+    board = []
+    for x in range(boardWidth):
+        col = []
+        for y in range(boardHeight):
+            col.append(icons.pop())
+        board.append(col)
+    return board
+
+# 計算左上角座標
+def _leftTopCoordsOfBox(box_x, box_y):
+    left = box_x * (boxSize + gapSize) + xMargin
+    top = box_y * (boxSize + gapSize) + yMargin
+    return (left, top)
+
+# 滑鼠點擊哪個格子
+def getBoxAtPixel(x, y):
+    for box_x in range(boardWidth):
+        for box_y in range(boardHeight):
+            left, top = _leftTopCoordsOfBox(box_x, box_y)
+            boxRect = pygame.Rect(left, top, boxSize, boxSize)
+            if boxRect.collidepoint(x, y):
+                return (box_x, box_y)
+    return (None, None)
+
+# 取得圖示
+def getColorAndShape(board, box_x, box_y):
+    return board[box_x][box_y]
+
+# 繪製圖示
+def _drawIcon(shape, color, box_x, box_y):
+    quarter = int(boxSize * 0.25)
+    half = int(boxSize * 0.5)
+    left, top = _leftTopCoordsOfBox(box_x, box_y)
+
+    if shape == Donut:
+        pygame.draw.circle(window, color, (left + half, top + half), half - 5)
+        pygame.draw.circle(window, bgColor, (left + half, top + half), quarter - 5)
+    elif shape == Square:
+        pygame.draw.rect(window, color, (left + quarter, top + quarter, boxSize - half, boxSize - half))
+    elif shape == Diamond:
+        pygame.draw.polygon(window, color, [(left + half, top), (left + boxSize - 1, top + half),
+                                            (left + half, top + boxSize - 1), (left, top + half)])
+    elif shape == Lines:
+        for i in range(0, boxSize, 10):
+            pygame.draw.line(window, color, (left, top + i), (left + i, top))
+            pygame.draw.line(window, color, (left + i, top + boxSize), (left + boxSize, top + i))
+    elif shape == Oval:
+        pygame.draw.ellipse(window, color, (left, top + quarter, boxSize, half))
+
+# 繪製棋盤
+def drawBoard(board):
+    for box_x in range(boardWidth):
+        for box_y in range(boardHeight):
+            left, top = _leftTopCoordsOfBox(box_x, box_y)
+            cell = board[box_x][box_y]
+            if cell is not None:
+                shape, color = cell
+                _drawIcon(shape, color, box_x, box_y)
+            else:
+                pygame.draw.rect(window, bgColor, (left, top, boxSize, boxSize))
+
+# 勝利判斷
+def hasWon(board):
+    for col in board:
+        for cell in col:
+            if cell is not None:
+                return False
+    return True
+
+# 勝利動畫
+def gameWonAnimation():
+    window.fill(lightbgColor)
+    img = font.render("You Win!", True, cyan)
+    window.blit(img, (window_x // 2 - 100, window_y // 2 - 30))
+    pygame.display.update()
+    pygame.time.wait(1500)
+
+# 主函數
+def main():
+    global window, FpsClock
+    pygame.init()
+    window = pygame.display.set_mode((window_x, window_y))
+    pygame.display.set_caption("Match Puzzle")
+    FpsClock = pygame.time.Clock()
+
+    mainBoard = getRandomizeBoard()
+    selected = None
+    mouse_x = 0
+    mouse_y = 0
+
+    while True:
+        mouseClicked = False
+        window.fill(bgColor)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEMOTION:
+                mouse_x, mouse_y = event.pos
+            elif event.type == pygame.MOUSEBUTTONUP:
+                mouse_x, mouse_y = event.pos
+                mouseClicked = True
+
+        box_x, box_y = getBoxAtPixel(mouse_x, mouse_y)
+
+        if box_x is not None and box_y is not None:
+            if mainBoard[box_x][box_y] is not None:
+                if mouseClicked:
+                    if selected is None:
+                        selected = (box_x, box_y)
+                    else:
+                        sel_x, sel_y = selected
+                        if (sel_x, sel_y) != (box_x, box_y) and mainBoard[sel_x][sel_y] == mainBoard[box_x][box_y]:
+                            mainBoard[sel_x][sel_y] = None
+                            mainBoard[box_x][box_y] = None
+                        selected = None
+                else:
+                    drawHighlight(box_x, box_y)
+
+        drawBoard(mainBoard)
+
+        if hasWon(mainBoard):
+            gameWonAnimation()
+            mainBoard = getRandomizeBoard()
+            selected = None
+
+        pygame.display.update()
+        FpsClock.tick(FPS)
+
+# 畫高亮框
+def drawHighlight(box_x, box_y):
+    left, top = _leftTopCoordsOfBox(box_x, box_y)
+    pygame.draw.rect(window, highlightColor, (left - 5, top - 5, boxSize + 10, boxSize + 10), 3)
+
+if __name__ == '__main__':
+    main()
