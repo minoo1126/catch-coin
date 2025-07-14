@@ -1,186 +1,283 @@
 import pygame
 import random
-import sqlite3
-pygame.init()
+import sys
+import threading
+import time
 
-WIDTH = 800
-HEIGHT = 600
-BLOCK_SIZE = 30
-BOARD_WIDTH = (WIDTH-270) // BLOCK_SIZE
-BOARD_HEIGHT = (HEIGHT) // BLOCK_SIZE 
+# 遊戲畫面寬與高
+width = 460
+height = 750
+# 每個格子的大小
+cell_size = 30
+# 欄數與列數
+col = 10
+row = height // cell_size
 
+# 顏色定義
+COLORS = {
+    'background': (0, 0, 0),
+    'grid': (30, 30, 30),
+    'text': (100, 100, 100),
+    'button_start': (0, 150, 0),
+    'button_restart': (150, 100, 0),
+    'border': (50, 50, 50)
+}
 
-BLACK = (0, 0, 0)
-WHITE = (50, 50, 50)
-CYAN = (0, 255, 255)
-YELLOW = (255, 255, 0)
-MAGENTA = (255, 0, 255)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-ORANGE = (255, 165, 0)
+# 方塊顏色清單
+PIECE_COLORS = [
+    (0, 255, 255),
+    (255, 255, 0),
+    (255, 0, 255),
+    (0, 255, 0),
+    (100, 100, 100),
+    (100, 100, 255),
+    (255, 165, 0)
+]
 
+# 各種形狀的磚塊
 SHAPES = [
     [[1, 1, 1, 1]],
     [[1, 1], [1, 1]],
-    [[1, 1, 0], [0, 1, 1]],
     [[0, 1, 1], [1, 1, 0]],
+    [[1, 1, 0], [0, 1, 1]],
     [[1, 0, 0], [1, 1, 1]],
     [[0, 0, 1], [1, 1, 1]],
     [[0, 1, 0], [1, 1, 1]]
 ]
 
-shape_color = [CYAN, YELLOW, MAGENTA, GREEN, RED, BLUE, ORANGE]
-
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Tetrix")
-
-#初始化Tetris的遊戲畫面
-board = [[0] * BOARD_WIDTH for _ in range(BOARD_HEIGHT)]
-
+# 定義磚塊物件
 class Brick:
     def __init__(self):
         self.shape = random.choice(SHAPES)
-        self.color = random.choice(shape_color)
-        self.color_index = shape_color.index(self.color) + 1
-        self.x = BOARD_WIDTH // 2 - len(self.shape[0]) // 2
+        self.color = random.choice(PIECE_COLORS)
+        self.x = col // 2 - len(self.shape[0]) // 2
         self.y = 0
+
     def rotate(self):
         self.shape = [list(row) for row in zip(*self.shape[::-1])]
 
-    
-    def is_collision(self, offset_x=0, offset_y=0):
-       for row in range(len(self.shape)):
-          for col in range(len(self.shape[0])):
-             if self.shape[row][col] == 1:
-                px = self.x + col + offset_x
-                py = self.y + row + offset_y
+# 定義遊戲邏輯
+class Tetris:
+    def __init__(self):
+        self.grid = [[0] * row for _ in range(col)]
+        self.current_brick = Brick()
+        self.next_brick = Brick()
+        self.running = False
+        self.score = 0
+        self.high_score = 0
+        self.game_over = False
 
-                # 超出邊界
-                if px < 0 or px >= BOARD_WIDTH or py >= BOARD_HEIGHT:
-                    return True
+    def is_collidepoint(self, brick, dx=0, dy=0):
+        for y, row_line in enumerate(brick.shape):
+            for x, cell in enumerate(row_line):
+                if cell:
+                    grid_x = brick.x + x + dx
+                    grid_y = brick.y + y + dy
+                    if (
+                        grid_x < 0 or grid_x >= col or
+                        grid_y >= row or
+                        (grid_y >= 0 and self.grid[grid_x][grid_y])
+                    ):
+                       return False
+        return True
 
-                # 撞到現有的方塊
-                if py >= 0 and board[py][px] != 0:
-                    return True
-       return False
 
     def lock_brick(self):
-       for row in range(len(self.shape)):
-          for col in range(len(self.shape[0])):
-             if (self.shape[row][col] == 1):
-                px = self.x + col
-                py = self.y + row
-                if (0 <= py < BOARD_HEIGHT and 0 <= px < BOARD_WIDTH):
-                    board[py][px] = self.color_index
+        for y, row in enumerate(self.current_brick.shape):
+            for x, cell in enumerate(row):
+                if cell:
+                    self.grid[self.current_brick.x + x][self.current_brick.y + y] = self.current_brick.color
 
+    def clear_line(self):
+        clear_lines = 0
+        for y in range(row):
+            if all(self.grid[x][y] for x in range(col)):
+                clear_lines += 1
+                for move_y in range(y, 0, -1):
+                    for x in range(col):
+                        self.grid[x][move_y] = self.grid[x][move_y - 1]
+                for x in range(col):
+                    self.grid[x][0] = 0
+        self.score += clear_lines * 100
+        if self.score > self.high_score:
+            self.high_score = self.score
 
-#畫圖出來
-def draw_board():
-    for row in range(BOARD_HEIGHT):
-        for col in range(BOARD_WIDTH):
-            if board[row][col] != 0:
-                color = shape_color[board[row][col] - 1]
-                pygame.draw.rect(screen, color,
-                    (col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-                
+    def get_drop_position(self):
+        drop_brick = Brick()
+        drop_brick.shape = self.current_brick.shape
+        drop_brick.color = self.current_brick.color
+        drop_brick.x = self.current_brick.x
+        drop_brick.y = self.current_brick.y
 
-    # 畫橫線（橫的格子）
-    for row in range(BOARD_HEIGHT):
-        pygame.draw.line(screen, WHITE, (0, row * BLOCK_SIZE), (WIDTH, row * BLOCK_SIZE))
+        while self.is_collidepoint(drop_brick, 0, 1):
+            drop_brick.y += 1
 
-    # 畫直線（直的格子）
-    for col in range(BOARD_WIDTH):
-        pygame.draw.line(screen, WHITE, (col * BLOCK_SIZE, 0), (col * BLOCK_SIZE, HEIGHT))
+        return drop_brick
 
-def draw_shape(brick, offset_x = 0, offset_y = 0):
-    for row in range(len(brick.shape)):
-        for col in range(len(brick.shape[0])):
-            if brick.shape[row][col] == 1:
-                px = (brick.x + col + offset_x) * BLOCK_SIZE
-                py = (brick.y + row + offset_y) * BLOCK_SIZE
-                pygame.draw.rect(screen, brick.color, (px, py, BLOCK_SIZE, BLOCK_SIZE))
-                pygame.draw.rect(screen, WHITE, (px, py, BLOCK_SIZE, BLOCK_SIZE), 1)
-def clear_lines():
-    cleared = 0
-    new_board = []
-    for row in board:
-        if all(row):
-            cleared += 1
-        else:
-            new_board.append(row)
-    while len(new_board) < BOARD_HEIGHT:
-        new_board.insert(0, [0] * BOARD_WIDTH)
-    for i in range(BOARD_HEIGHT):
-        board[i] = new_board[i]
-    return cleared * 100
+    def rotate_brick(self):
+        original_shape = self.current_brick.shape[:]
+        self.current_brick.rotate()
+        if not self.is_collidepoint(self.current_brick):
+            self.current_brick.shape = original_shape
 
-def show_message(text):
-    font = pygame.font.SysFont("None", 70)
-    text_surface = font.render(text, True, (255, 255, 0))
-    rect = text_surface.get_rect(center = (WIDTH // 2, HEIGHT // 2))
-    screen.blit(text_surface, rect)
-    pygame.display.update()
-    pygame.time.delay(2000)
+# 遊戲畫面渲染器
+class Renderer:
+    def __init__(self, screen, game):
+        self.screen = screen
+        self.game = game
+        self.start_button_rect = pygame.Rect(width + 5, height // 2 + 30, 100, 40)
+        self.restart_button_rect = pygame.Rect(width + 5, height // 2 + 100, 100, 40)
+        self.pause_button_rect = pygame.Rect(width + 5, height // 2 + 170, 100, 40)
+        self.preview_pos = (width + 10, 60)
+        self.score_pos = (width + 10, 110)
+        self.high_score_pos = (width + 10, 250)
+        self.hint_pos = (width + 10, height // 2 + 240)
+        self.control_pos = (width + 10, height // 2 + 240)
 
+    # 繪製主網格
+    def draw_grid(self):
+        pygame.draw.rect(self.screen, COLORS['border'], pygame.Rect(0, 0, col * cell_size, row * cell_size))
+        for x in range(col):
+            for y in range(row):
+                color = self.game.grid[x][y] if self.game.grid[x][y] else COLORS['grid']
+                rect = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
+                pygame.draw.rect(self.screen, color, rect)
+                pygame.draw.rect(self.screen, COLORS['border'], rect, 1)
+
+    # 分數框
+    def draw_score_box(self, pos, label, value):
+        font = pygame.font.SysFont('Ariel', 20)
+        rect = pygame.Rect(pos[0], pos[1], 120, 60)
+        pygame.draw.rect(self.screen, COLORS['grid'], rect)
+        pygame.draw.rect(self.screen, COLORS['border'], rect, 1)
+        self.screen.blit(font.render(label, True, COLORS['text']), (pos[0] + 10, pos[1] + 10))
+        self.screen.blit(font.render(str(value), True, COLORS['text']), (pos[0] + 10, pos[1] + 30))
+
+    # 下一個方塊預覽
+    def draw_preview_box(self):
+        font = pygame.font.SysFont('Ariel', 20)
+        self.screen.blit(font.render("Next", True, COLORS['text']), (self.preview_pos[0], self.preview_pos[1] - 30))
+        preview_rect = pygame.Rect(self.preview_pos[0], self.preview_pos[1], 4 * cell_size, 4 * cell_size)
+        pygame.draw.rect(self.screen, COLORS['grid'], preview_rect)
+        pygame.draw.rect(self.screen, COLORS['border'], preview_rect, 1)
+        brick = self.game.next_brick
+        start_x = self.preview_pos[0] + (4 * cell_size - len(brick.shape[0]) * cell_size) // 2
+        start_y = self.preview_pos[1] + (4 * cell_size - len(brick.shape) * cell_size) // 2
+        for y, row in enumerate(brick.shape):
+            for x, cell in enumerate(row):
+                if cell:
+                    rect = pygame.Rect(start_x + x * cell_size, start_y + y * cell_size, cell_size, cell_size)
+                    pygame.draw.rect(self.screen, brick.color, rect)
+                    pygame.draw.rect(self.screen, COLORS['border'], rect, 1)
+
+    def draw_button(self):
+        font = pygame.font.SysFont("Ariel", 20)
+        pygame.draw.rect(self.screen, COLORS['button_start'], self.start_button_rect)
+        self.screen.blit(font.render("START", True, COLORS['text']), (self.start_button_rect.x + 20, self.start_button_rect.y + 10))
+        pygame.draw.rect(self.screen, COLORS['button_restart'], self.restart_button_rect)
+        self.screen.blit(font.render("RESTART", True, COLORS['text']), (self.restart_button_rect.x + 5, self.restart_button_rect.y + 10))
+        pygame.draw.rect(self.screen, COLORS['button_start'], self.pause_button_rect)
+        self.screen.blit(font.render("PAUSE", True, COLORS['text']), (self.pause_button_rect.x + 20, self.pause_button_rect.y + 10))
+
+    def draw_game_over(self):
+        font = pygame.font.SysFont('Ariel', 40, bold=True)
+        text = font.render('GAME OVER', True, (255, 0, 0))
+        rect = text.get_rect(center=(width // 2, height // 2))
+        self.screen.blit(text, rect)
+
+    def draw_hint_box(self):
+        font = pygame.font.SysFont('Ariel', 16)
+        self.screen.blit(font.render("Press 'START' to begin", True, COLORS['text']), (self.hint_pos[0], self.hint_pos[1]))
+
+    def draw_control_box(self):
+        font = pygame.font.SysFont('Ariel', 16)
+        lines = ["→", "←", "↓", "Up : Rotate", "P: Pause"]
+        for i, line in enumerate(lines):
+            self.screen.blit(font.render(line, True, COLORS['text']), (self.control_pos[0], self.control_pos[1] + i * 20))
+
+    def render(self):
+        self.screen.fill(COLORS['background'])
+        self.draw_grid()
+        if self.game.running:
+            drop = self.game.get_drop_position()
+            for y, row in enumerate(drop.shape):
+                for x, cell in enumerate(row):
+                    if cell:
+                        rect = pygame.Rect((drop.x + x) * cell_size, (drop.y + y) * cell_size, cell_size, cell_size)
+                        pygame.draw.rect(self.screen, (200, 200, 200), rect, 1)
+            for y, row in enumerate(self.game.current_brick.shape):
+                for x, cell in enumerate(row):
+                    if cell:
+                        rect = pygame.Rect((self.game.current_brick.x + x) * cell_size, (self.game.current_brick.y + y) * cell_size, cell_size, cell_size)
+                        pygame.draw.rect(self.screen, self.game.current_brick.color, rect)
+                        pygame.draw.rect(self.screen, COLORS['border'], rect, 1)
+        elif self.game.game_over:
+            self.draw_game_over()
+        self.draw_score_box(self.score_pos, 'Score', self.game.score)
+        self.draw_score_box(self.high_score_pos, 'High Score', self.game.high_score)
+        self.draw_preview_box()
+        self.draw_button()
+        self.draw_hint_box()
+        self.draw_control_box()
+        pygame.display.flip()
+
+# 主程式
 def main():
-        current_shape = Brick()
-        score = 0
-        clock = pygame.time.Clock()
-        fall_time = 0
-        fall_speed = 0.3
+    pygame.init()
+    screen = pygame.display.set_mode((width + 150, height))
+    pygame.display.set_caption('TETRIS')
+    clock = pygame.time.Clock()
+    game = Tetris()
+    renderer = Renderer(screen, game)
+    drop_timer = 0
+    drop_interval = 500
+    paused = False
 
-        running = True
-        while running:
-            
-            dt = clock.tick(60) / 1000
-            #用來計算自動下落的時間
-            fall_time += dt
-            
-            #如果累積的時間大於預計下落的間隔，則下一次降落
-            if fall_time > fall_speed:
-                fall_time = 0
-                #如果磚塊不會撞到下邊界了話
-                if not current_shape.is_collision(0, 1):
-                    #磚塊就可以下移一格
-                    current_shape.y += 1
+    while True:
+        dt = clock.tick(60)
+        drop_timer += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if renderer.start_button_rect.collidepoint(event.pos):
+                    game.running = True
+                    paused = False
+                elif renderer.restart_button_rect.collidepoint(event.pos):
+                    game.__init__()
+                    game.running = True
+                    paused = False
+                elif renderer.pause_button_rect.collidepoint(event.pos):
+                    paused = not paused
+            elif event.type == pygame.KEYDOWN and game.running and not paused:
+                if event.key == pygame.K_LEFT and game.is_collidepoint(game.current_brick, dx=-1):
+                    game.current_brick.x -= 1
+                elif event.key == pygame.K_RIGHT and game.is_collidepoint(game.current_brick, dx=1):
+                    game.current_brick.x += 1
+                elif event.key == pygame.K_DOWN and game.is_collidepoint(game.current_brick, dy=1):
+                    game.current_brick.y += 1
+                elif event.key == pygame.K_UP:
+                    game.rotate_brick()
+                elif event.key == pygame.K_TAB:
+                    game.current_brick.y = game.get_drop_position().y
+
+        if game.running and not paused and not game.game_over:
+            if drop_timer > drop_interval:
+                drop_timer = 0
+                if game.is_collidepoint(game.current_brick, dy=1):
+                    game.current_brick.y += 1
                 else:
-                    current_shape.lock_brick()
-                    score += clear_lines()
-                    current_shape = Brick()
-                    #如果沒有空間放這個方塊了話
-                    if current_shape.is_collision(0,0):
-                        show_message("GAME OVER")
-                        running = False
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                   running = False
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_LEFT:
-                        if not current_shape.is_collision(-1, 0):
-                           current_shape.x -= 1
-                    elif event.key == pygame.K_RIGHT:
-                        if not current_shape.is_collision(1, 0):
-                            current_shape.x += 1
-                    elif event.key == pygame.K_DOWN:
-                        if not current_shape.is_collision(0, 1):
-                            current_shape.y += 1
-                    elif event.key == pygame.K_UP:
-                        current_shape.rotate()
-                        if current_shape.is_collision(0, 0):
-                            for _ in range(3):
-                                current_shape.rotate()
-                    elif event.key == pygame.K_TAB:
-                        while not current_shape.is_collision(0, 1):
-                            current_shape.y += 1
-                        current_shape.lock_brick()
-                        score += clear_lines()
-                        current_shape = Brick()
-            screen.fill(BLACK)
-            draw_board()
-            draw_shape(current_shape)
-            pygame.display.update()
+                    game.lock_brick()
+                    game.clear_line()
+                    game.current_brick = game.next_brick
+                    game.next_brick = Brick()
+                    if not game.is_collidepoint(game.current_brick):
+                        game.running = False
+                        game.game_over = True
 
-if __name__ == "__main__":
+        renderer.render()
+
+if __name__ == '__main__':
     main()
-                        
