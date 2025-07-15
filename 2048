@@ -1,0 +1,185 @@
+import pygame
+import random
+import sys
+
+width = 450
+height = 550
+TILE_SIZE = 100
+PADDING = 10
+COLORS = {
+    0: (204, 192, 179),
+    2: (230, 228, 218),
+    4: (237, 224, 200),
+    8: (242, 177, 121),
+    16: (245, 149, 99),
+    32: (246, 124, 95),
+    64: (246, 95, 59),
+    128: (237, 207, 114),
+    256: (237, 204, 97),
+    512: (237, 200, 80),
+    1024: (237, 197, 63),
+    2048: (237, 194, 46),
+}
+
+class Game:
+    def __init__(self):
+        #[0,0,0,0]
+        #[0,0,0,0]
+        #[0,0,0,0]
+        #[0,0,0,0]
+        self.grid = [[0] * 4 for _ in range(4)]
+        self.score = 0
+        self.high_score = 0
+        self.add_new_number()
+
+    def add_new_number(self):
+        empty_cells = [(row, col) for row in range(4) for col in range(4) if self.grid[row][col] == 0]
+        if empty_cells:
+            row, col = random.choice(empty_cells)
+            if random.random() < 0.9:
+                self.grid[row][col] = 2
+            else:
+                self.grid[row][col] = 4
+    
+    def move(self, direction):
+        moved = False
+    
+        if direction == 'left':
+            #每一列處理一次
+            for i in range(4):
+                #左移該列
+                newrow = self.move_row_left(self.grid[i])
+                #若移動結果不同
+                if newrow != self.grid[i]:
+                    #則代表有移動
+                    moved = True
+                #更新該列
+                self.grid[i] = newrow
+        elif direction == 'right':
+            for i in range(4):
+                newrow = self.move_row_right(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+        elif direction == 'up':
+            self.grid = [list(row) for row in zip(*self.grid)]
+            for i in range(4):
+                newrow = self.move_row_left(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+            self.grid = [list(row) for row in zip(*self.grid)]
+        elif direction == 'down':
+            self.grid = [list(row) for row in zip(*self.grid)]
+            for i in range(4):
+                newrow = self.move_row_right(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+            self.grid = [list(row) for row in zip(*self.grid)]
+        
+        if moved:
+            self.add_new_number()
+            self.high_score = max(self.high_score, self.score)
+        return moved
+    
+    def move_row_left(self, row):
+        #移除0，讓數字靠左
+        new_row = [num for num in row if num != 0]
+        #合併相同數字
+        for i in range(len(new_row) - 1):
+            if new_row[i] == new_row[i+1]:
+                #合併
+                new_row[i] *= 2
+                #加分
+                self.score += new_row[i]
+                #把合併掉的數字設為0
+                new_row[i+1] = 0
+        #再次清理0，數字靠左
+        new_row = [num for num in new_row if num != 0]
+        #補上右邊的0，讓長度變回4
+        return new_row + [0] * (4 - len(new_row))
+    
+    def move_row_right(self, row):
+        return self.move_row_left(row[::-1])[::-1]
+    
+    def is_game_over(self):
+        #如果有任何0可以在矩陣中找到位置去填補
+        if any(0 in row for row in self.grid):
+            #遊戲則還沒結束
+            return False
+        
+        #檢查水平方向可以合併
+        for i in range(4):
+            #因為矩陣只有(0,1,2)所以是3
+            for j in range(3):
+                #若兩個相鄰的數是同樣的，遊戲則不會結束
+                if self.grid[i][j] == self.grid[i][j + 1]:
+                    return False
+        
+        for j in range(4):
+            for i in range(3):
+                if self.grid[j][i] == self.grid[j][i + 1]:
+                    return False
+        
+        return True
+
+def draw_game(screen, game, font):
+    screen.fill((187, 173, 168))
+
+    text = font.render(f"score: {game.score} high: {game.high_score}", True, (119, 110, 101))
+    screen.blit(text, (20, 20))
+
+    for i in range(4):
+        for j in range(4):
+            value = game.grid[i][j]
+            x = j * (TILE_SIZE + PADDING) + PADDING
+            y = i * (TILE_SIZE + PADDING) + 80
+            pygame.draw.rect(screen, COLORS.get(value, (0,0,0)),
+                             (x, y, TILE_SIZE, TILE_SIZE))
+            if value != 0:
+                text_surface  = font.render(str(value), True, (119, 110, 101))
+                text_rect = text_surface.get_rect(center=(x + TILE_SIZE // 2, y + TILE_SIZE // 2))
+                screen.blit(text_surface, text_rect)
+    if game.is_game_over():
+        overlay = pygame.Surface((width, height - 80), pygame.SRCALPHA)
+        overlay.fill((255, 255, 255))
+        text = font.render("Game Over | Please Press R To Restart", True, (255, 0, 0))
+        text_rect = text.get_rect(center = (width // 2, height - 80 // 2 + 40))
+        overlay.blit(text, text_rect)
+        screen.blit(overlay, (0, 80))
+
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((width, height))
+    pygame.display.set_caption("2048")
+    clock = pygame.time.Clock()
+    font = pygame.font.Font(None, 36)
+    game = Game()
+
+    while True:
+        draw_game(screen, game, font)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == pygame.K_r:
+                    game = Game()
+                elif event.key == pygame.K_LEFT:
+                    game.move('left')
+                elif event.key == pygame.K_RIGHT:
+                    game.move('right')
+                elif event.key == pygame.K_UP:
+                    game.move('up')
+                elif event.key == pygame.K_DOWN:
+                    game.move('down')
+        
+        pygame.display.flip()
+        clock.tick(60)
+
+if __name__ == "__main__":
+    main()
