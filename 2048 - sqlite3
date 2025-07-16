@@ -1,0 +1,242 @@
+import pygame
+import random
+import sys
+import sqlite3
+
+width = 450
+height = 550
+cell_size = 100
+gapsize = 10
+
+COLOR = {
+    0: (204, 192, 179),
+    2: (230, 228, 218),
+    4: (237, 224, 200),
+    8: (242, 177, 121),
+    16: (245, 149, 99),
+    32: (246, 124, 95),
+    64: (246, 95, 59),
+    128: (237, 207, 114),
+    256: (237, 204, 97),
+    512: (237, 200, 60),
+    1024: (237, 197, 63),
+    2048: (237, 194, 46)
+}
+
+
+def init_db():
+    conn = sqlite3.connect('2048.db')
+    cursor = conn.cursor()
+    cursor.execute('''Create Table If Not Exists User(
+                   id Integer Primary Key Autoincrement,
+                   username Text Unique Not Null,
+                   password Text Not Null,
+                   high_score Integer Default 0)''')
+    conn.commit()
+    conn.close()
+
+def database(limit = 10):
+    conn = sqlite3.connect('2048.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, high_score From user Order By high_score Desc Limit ?",(limit,))
+    high_score = cursor.fetchall()
+    conn.close()
+    return high_score
+
+def save_score(username, score):
+    conn = sqlite3.connect('2048.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT high_score FROM user WHERE username=?", (username,))
+    result = cursor.fetchall()
+    if result:
+        if score > result[0][0]:
+            cursor.execute("UPDATE user SET high_score=? WHERE username=?", (score, username))
+    else:
+        cursor.execute("INSERT INTO user(username, password, high_score) VALUES (?, '', ?)", (username, score))
+    conn.commit()
+    conn.close()
+
+class Game:
+    def __init__(self):
+        self.grid = [[0] * 4 for _ in range(4)]
+        self.score = 0
+        self.high_score = 0
+        self.add_new_number()
+
+    def add_new_number(self):
+        empty_cell = [(row, col) for row in range(4) for col in range(4) if self.grid[row][col] == 0]
+        if empty_cell:
+            row, col = random.choice(empty_cell)
+            if random.random() < 0.9:
+                self.grid[row][col] = 2
+            else:
+                self.grid[row][col] = 4
+    
+    def move(self, direction):
+        moved = False
+        
+        if direction == 'left':
+            for i in range(4):
+                newrow = self.move_row_left(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+        elif direction == 'right':
+            for i in range(4):
+                newrow = self.move_row_right(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+        elif direction == 'up':
+            self.grid = [list(row) for row in zip(*self.grid)]
+            for i in range(4):
+                newrow = self.move_row_left(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                self.grid[i] = newrow
+            self.grid = [list(row) for row in zip(*self.grid)]
+        elif direction == 'down':
+            self.grid = [list(row) for row in zip(*self.grid)]
+            for i in range(4):
+                newrow = self.move_row_right(self.grid[i])
+                if newrow != self.grid[i]:
+                    moved = True
+                    self.grid[i] = newrow
+            self.grid = [list(row) for row in zip(*self.grid)]
+        if moved:
+            self.add_new_number()
+            high_score = database()
+            db_high = high_score[0][1] if high_score else 0
+            self.high_score = max(db_high, self.score)
+        return moved
+
+    def move_row_left(self, row):
+        new_row = [num for num in row if num != 0]
+        for i in range(len(new_row) - 1):
+            if new_row[i] == new_row[i + 1]:
+                new_row[i] *= 2
+                self.score += new_row[i]
+                new_row[i + 1] = 0
+        new_row = [num for num in new_row if num != 0]
+        return new_row + [0] * (4 - len(new_row))
+    
+    def move_row_right(self, row):
+        return self.move_row_left(row[::-1])[::-1]
+    
+    def is_game_over(self):
+        if any(0 in row for row in self.grid):
+            return False
+        
+        for i in range(4):
+            for j in range(3):
+                if self.grid[i][j] == self.grid[i][j + 1]:
+                    return False
+        
+        for j in range(4):
+            for i in range(3):
+                if self.grid[j][i] == self.grid[j][i + 1]:
+                    return False
+        
+        return True
+
+def draw_game(screen, game, font):
+    screen.fill((187, 120, 20))
+    text = font.render(f"score : {game.score} high score : {game.high_score}", True, (119, 110, 101))
+    screen.blit(text,  (20, 20))
+
+    for i in range(4):
+        for j in range(4):
+            value = game.grid[i][j]
+            x = j * (cell_size + gapsize) + gapsize
+            y = i * (cell_size + gapsize) + 60
+            #CLOLOR.get(0, 0, 0) = 取得第一個顏色的數值所以是(204,192,179)
+            pygame.draw.rect(screen, COLOR.get(value, (0, 0, 0)),
+                            (x, y, cell_size, cell_size))
+            if value != 0:
+                text_surface = font.render(str(value), True, (119, 110, 101))
+                text_rect = text_surface.get_rect(center = (x + cell_size // 2, y + cell_size // 2))
+                screen.blit(text_surface, text_rect)
+
+    if game.is_game_over():
+        #pygame.SRCALPHA 支援透明背景
+        overlay = pygame.Surface((width, height - 80), pygame.SRCALPHA)
+        overlay.fill((255, 255, 255))
+        text = font.render("Game Over | Please Press R To Restart", True, (255, 0, 0))
+        text_rect = text.get_rect(center = (width // 2, height))
+        overlay.blit(text, text_rect)
+        screen.blit(overlay, (0, 80))
+def input_username(screen, font):
+    input_text = ''
+    entering = True
+    clock = pygame.time.Clock()
+
+    while entering:
+        screen.fill((182, 173, 186))
+        prompt = font.render("Please Input User Name:", True, (119, 110, 101))
+        text_surface = font.render(input_text, True, (0, 0, 0))
+        screen.blit(prompt, (50, 150))
+        screen.blit(text_surface, (50, 200))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                print("Key pressed:", event.unicode, event.key)  # 印出按鍵，方便除錯
+                if event.key == pygame.K_RETURN:
+                    if input_text.strip() != '':
+                        entering = False
+                elif event.key == pygame.K_BACKSPACE:
+                    input_text = input_text[:-1]
+                else:
+                    if len(input_text) < 12:
+                        input_text += event.unicode
+
+        clock.tick(30)
+
+    return input_text
+
+def main():
+    init_db()
+    pygame.init()
+    screen = pygame.display.set_mode((width, height))
+    pygame.display.set_caption("2048")
+    clock = pygame.time.Clock()
+    font = pygame.font.Font(None, 36)
+
+    username = input_username(screen, font)
+
+    game = Game()
+    
+    
+    
+    while True:
+        draw_game(screen, game, font)
+
+        if game.is_game_over():
+            save_score(username, game.score)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == pygame.K_r:
+                   game = Game()
+                elif event.key == pygame.K_LEFT:
+                   game.move('left')
+                elif event.key == pygame.K_RIGHT:
+                   game.move('right')
+                elif event.key == pygame.K_UP:
+                   game.move('up')
+                elif event.key == pygame.K_DOWN:
+                   game.move('down')
+        pygame.display.flip()
+        clock.tick(60)
+
+if __name__ == '__main__':
+    main()
