@@ -89,7 +89,7 @@ class Game:
         #合併相同數字
         for i in range(len(new_row) - 1):
             if new_row[i] == new_row[i+1]:
-                #合併
+                #合併(因為2*2=4,4*2=8,8*2=16,16*2=32)
                 new_row[i] *= 2
                 #加分
                 self.score += new_row[i]
@@ -135,6 +135,7 @@ def draw_game(screen, game, font):
             value = game.grid[i][j]
             x = j * (TILE_SIZE + PADDING) + PADDING
             y = i * (TILE_SIZE + PADDING) + 80
+            #CLOLOR.get(0, 0, 0) = 取得第一個顏色的數值所以是(204,192,179)
             pygame.draw.rect(screen, COLORS.get(value, (0,0,0)),
                              (x, y, TILE_SIZE, TILE_SIZE))
             if value != 0:
@@ -142,6 +143,7 @@ def draw_game(screen, game, font):
                 text_rect = text_surface.get_rect(center=(x + TILE_SIZE // 2, y + TILE_SIZE // 2))
                 screen.blit(text_surface, text_rect)
     if game.is_game_over():
+        #pygame.SRCALPHA 支援透明背景
         overlay = pygame.Surface((width, height - 80), pygame.SRCALPHA)
         overlay.fill((255, 255, 255))
         text = font.render("Game Over | Please Press R To Restart", True, (255, 0, 0))
