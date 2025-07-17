@@ -1,0 +1,130 @@
+import pygame
+import random
+import sys
+
+width = 500
+height = 500
+cell_size = 50
+board_width = width // cell_size
+board_height = height // cell_size
+bomb = 10
+
+
+grid_color = (227, 168, 105)
+text_color = (0, 0, 0)
+
+pygame.init()
+font = pygame.font.SysFont(None, 24)
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("踩地雷")
+
+class Boo:
+    def __init__(self, row, col, bomb):
+        self.revealed = [[False] * col for _ in range(row)]
+        self.row = row
+        self.col = col
+        self.bombs = bomb
+        self.board = [[0] * col for _ in range(row)]
+        #埋地雷數值
+        self.place_bomb()
+        #計算周圍埋地雷的步數
+        self.calculate_number()
+        self.game_over = False
+    
+    def place_bomb(self):
+        placed = 0
+        while placed < self.bombs:
+            r = random.randint(0, self.row - 1)
+            c = random.randint(0, self.col - 1)
+            if self.board[r][c] != '💣':
+               self.board[r][c] = '💣'
+               placed += 1
+    
+    def calculate_number(self):
+        for r in range(self.row):
+            for c in range(self.col):
+                if self.board[r][c] == '💣':
+                    continue
+                count = 0
+                #掃描周圍8格[(-1,-1),(-1,0),(-1,1)
+                #            (0,-1),(被點),(0, 1)
+                #            (1,-1),(1, 0),(1, 1)]
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        #計算鄰近格子的座標 r + dr = row + 偏移量
+                        new_row, new_col = r + dr, c + dc
+                        #如果值在畫面內了話
+                        if 0 <= new_row < self.row and 0 <= new_col < self.col:
+                            #就會顯示地雷
+                            if self.board[new_row][new_col] == '💣':
+                                count += 1
+                #將周圍地雷數量寫入這格
+                self.board[r][c] = count
+
+    def click(self, row, col):
+        if not (0 <= row < self.row and 0 <= col < self.col):
+            return True
+        if self.revealed[row][col]:
+            return True
+        
+        self.revealed[row][col] = True
+
+        if self.board[row][col] == '💣':
+            self.game_over = True
+            return False
+        
+        #只顯示，不持續挖開(只顯示數字而不適挖開他)
+        elif self.board[row][col] > 0:
+            return True
+        
+        elif self.board[row][col] == 0:
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    nr, nc = row + dr, col + dc
+                    if (dr != 0 or dc != 0) and 0 <= nr < self.row and 0 <= nc < self.col:
+                       if not self.revealed[nr][nc]:
+                          self.click(nr, nc)
+            return True
+        
+    def show(self, screen):
+        for row in range(self.row):
+            for col in range(self.col):
+                rect = pygame.Rect(col * cell_size, row * cell_size
+                                , cell_size, cell_size)
+                pygame.draw.rect(screen, grid_color, rect, 1)
+
+                if self.revealed[row][col]:
+                    if self.board[row][col] == '💣':
+                        text = font.render('💣', True, (text_color))
+                        screen.blit(text, rect.topleft)
+                    elif self.board[row][col] > 0:
+                        text = font.render(str(self.board[row][col]), True, (text_color))
+                        screen.blit(text, rect.topleft)
+                    elif self.game_over and self.board[row][col] == '💣':
+                        text = font.render('💣', True, (text_color))
+                        screen.blit(text, rect.topleft)
+
+def main():
+    clock = pygame.time.Clock()
+    game = Boo(board_height, board_width, bomb)
+
+    while True:
+        screen.fill((255, 255, 255))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN and not game.game_over:
+                mx, my = pygame.mouse.get_pos()
+                row = my // cell_size
+                col = mx // cell_size
+                game.click(row, col)
+
+        game.show(screen)
+        pygame.display.flip()
+        clock.tick(60)
+
+if __name__ == '__main__':
+    main()
+                    
