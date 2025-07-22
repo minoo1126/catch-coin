@@ -5,7 +5,6 @@ import os
 from enum import Enum
 import time
 from pygame.locals import *
-from mineblock import *
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RES_DIR = os.path.join(BASE_DIR, 'resources')
@@ -115,11 +114,11 @@ class MineBlock:
             for i, j in around:
                 #其餘都是直接揭開提示
                 if self.block[j][i].status == BlockStatus.cover:
-                    self[j][i].status == BlockStatus.hint
+                    self.block[j][i].status = BlockStatus.hint
             return result
     def double_mouse_button_up(self, x, y):
         self.block[y][x].status = BlockStatus.reveal
-        for i, j in get_around(x, y):
+        for i, j in get_around(x, y, width, height):
             if self.block[j][i].status == BlockStatus.hint:
                 self.block[j][i].status = BlockStatus.cover
 
