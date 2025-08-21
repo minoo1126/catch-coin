@@ -1,0 +1,427 @@
+import pygame, os, sys, random, time,math,copy
+import pygame.gfxdraw
+from pygame.locals import *
+
+FPS = 120
+width = 660
+height = 440
+textheight = 20
+BubbleRadius = 20
+BubbleWidth = 20 * 2
+BubbleLayer = 5
+BubbleAdjust = 5
+startX = width / 2
+startY = height - 27
+arraywidth = 16
+arrayheight = 14
+
+RIGHT = 'right'
+LEFT = 'left'
+BLANK = '.'
+
+gray = (100, 100, 100)
+white = (255, 255, 255)
+red = (255, 0, 0)
+navyblue = (60, 60, 100)
+green = (0, 255, 0)
+blue = (0, 0, 255)
+yellow = (255, 255, 0)
+orange = (255, 120, 0)
+purple = (255, 0, 255)
+cyan = (0, 255, 255)
+black = (0, 0, 0)
+comeblue = (233, 232, 255)
+
+bgcolor = white
+colorList = [red, navyblue, green, blue, yellow, orange, purple, cyan]
+
+#這是附著在箭頭上的泡泡，所以要算這些
+class Bubble:
+    def __init__(self, color, row = 0, col = 0):
+        #建立BUBBLE的初始結構
+        self.rect = pygame.Rect(0, 0, 30, 30)
+        #建立一個矩形結構，定位泡泡生成的地方(x, y, 長, 寬)
+        #centerx = 讓泡泡置中 = centerx 跟 centery = 置中
+        self.rect.centerx = startX
+        self.rect.centery = startY
+        self.speed = 10
+        self.color = color
+        self.radius = BubbleRadius
+        self.angle = 0
+        #泡泡在陣列中的位置
+        self.row = row
+        self.col = col
+    def update(self):
+        #如果角度為90度，直接讓y向上移動而x則不用動
+        if self.angle == 90:
+            xmove = 0
+            #垂直方向向上(因為+1時，泡泡會向下，所以用-1代表向上移動)
+            ymove = self.speed * -1
+        elif self.angle < 90:
+            xmove = self.xcalculate(self.angle)
+            ymove = self.ycalculate(self.angle)
+        elif self.angle > 90:
+            xmove = self.xcalculate(180 - self.angle) * -1
+            ymove = self.ycalculate(180 - self.angle)
+        
+        self.rect.x += xmove
+        self.rect.y += ymove
+    
+    def xcalculate(self, angle):
+        radius = math.radians(angle)
+
+        xmove = math.cos(radius) * self.speed
+        return xmove
+    
+    def ycalculate(self, angle):
+        radius = math.radians(angle)
+
+        ymove = math.sin(radius) * self.speed
+        return ymove 
+    
+    def draw(self):
+        pygame.gfxdraw.filled_circle(canva, self.rect.centerx, self.rect.centery, self.radius, self.color)
+        pygame.gfxdraw.aacircle(canva, self.rect.centerx, self.rect.centery, self.radius, gray)
+
+class Arrow:
+    def __init__(self):
+        self.angle = 90
+        ArrowImg = pygame.image.load('Arrow.png')
+        ArrowImg.convert_alpha()
+        ArrowRect = ArrowImg.get_rect()
+        self.img = ArrowImg
+        self.transformImg = self.img
+        self.rect = ArrowRect
+        self.rect.centerx = startX
+        self.rect.centery = startY
+    
+    def update(self, direction):
+        if direction == LEFT and self.angle < 180:
+            self.angle += 2
+        elif direction == RIGHT and self.angle > 0:
+            self.angle -= 2
+
+        self.transformImg = pygame.transform.rotate(self.img, self.angle)
+        self.rect = self.transformImg.get_rect()
+        self.rect.centerx = startX
+        self.rect.centery = startY
+    
+    def draw(self):
+        canva.blit(self.transformImg, self.rect)
+
+class Score:
+    def __init__(self):
+        self.score = 0
+        self.text = pygame.font.SysFont('Helvetica', 15)
+        self.render = self.text.render('Score: ' + str(self.score), True, black, white)
+        self.rect = self.render.get_rect()
+        self.rect.left = 5
+        self.rect.bottom = height - 5
+    
+    def update(self, deleteList):
+        self.total = ((len(deleteList)) * 10)
+        self.render = self.text.render('Score: ' + str(self.score), True, black, white)
+    
+    def draw(self):
+        canva.blit(self.render, self.rect)
+
+def makeBlankBoard():
+    array = []
+
+    for rol in range(height):
+        col = []
+        for i in range(width):
+            col.append(BLANK)
+        array.append(col)
+    return array
+
+def setBubble(array, gameColorList):
+    for row in range(5):
+        for col in range(len(array[row])):
+            random.shuffle(gameColorList)
+            newBubble = Bubble(gameColorList[0], row, col)
+            array[row][col] = newBubble
+    setArrayPos(array)
+
+def setArrayPos(array):
+    for row in range(arrayheight):
+        for col in range(len(array[row])):
+            if array[row][col] != BLANK:
+                array[row][col].rect.x = (BubbleWidth * col) + 5
+                array[row][col].rect.y = (BubbleWidth * row) + 5
+
+def get_bubble_position(row, col, radius):
+    x_offset = radius * 2 * col
+    if row % 2 == 1:
+        x_offset += radius
+    y_offset = radius * math.sqrt(3)
+    return x_offset + radius, y_offset + radius
+
+def circle_collision(x1, y1, x2, y2, radius):
+    dx = x1 - x2
+    dy = y1 - y2
+    distance = math.sqrt(pow(dx, 2) + pow(dy, 2))
+    if distance <= (radius * 2):
+        return
+
+def stopBubble(bubbleArray, newBubble, launchBubble, score):
+    if newBubble is None:
+        return launchBubble, newBubble, score
+    
+    radius = newBubble.radius
+    deleteList = []
+    for row in range(len(bubbleArray)):
+        for col in range(len(bubbleArray[row])):
+            if bubbleArray[row][col] != BLANK:
+                bx, by = get_bubble_position(row, col, radius)
+                if circle_collision(newBubble.rect.centerx, newBubble.rect.centery, bx, by, radius):
+                    #如果泡泡跑到程式的最上方，就會放在同一行同一列
+                    #因為跑跑最上方就只有同一行有位置可以放，他不能放在其他泡泡下面
+                    if newBubble.rect.top <= 0:
+                        newRow, newCol = 0, col
+                    else:
+                        #如果撞到其他行的泡泡，那就把它放在那個泡泡的下面
+                        #假設泡泡發射出去撞到第三行的泡泡且第四行還有其他泡泡那就會直接被放到第四行
+                        newRow = row + 1
+                        if row % 2 == 0:
+                            newCol = col
+                        else:
+                            newCol = col + 1
+                        #防止邊界有泡泡
+                        if newRow >= len(bubbleArray):
+                            newRow = row
+                        if newCol >= len(bubbleArray):
+                            newCol = col
+                        if bubbleArray[newRow][newCol] != BLANK:
+                            newRow = row
+                    bubbleArray[newRow][newCol] = copy.copy(newBubble)
+                    bubbleArray[newRow][newCol].row = newRow
+                    bubbleArray[newRow][newCol].col = newCol
+                    
+                    #找出和新泡泡顏色相同且相連的泡泡(整個泡泡陣列，新泡泡放置的位置，新泡泡的顏色，用來記錄需要被削除的泡泡)
+                    popBubble(bubbleArray, newRow, newCol, newBubble.color, deleteList)
+
+                    if len(deleteList) >= 3:
+                        for pos in deleteList:
+                            r, c = pos
+                            bubbleArray[r][c] = BLANK
+                            checkForFloaters(bubbleArray)
+                            score.update(deleteList)
+                    launchBubble = False
+                    newBubble = None
+                    return launchBubble, newBubble, score
+    return launchBubble, newBubble, score
+
+def popBubble(bubbleArray, newRow, newCol, newBubbleColor, deleteList):
+    row = len(bubbleArray)
+    col = len(bubbleArray[0])
+#   row = 0:o  o  o  o
+#   row = 1:  o  o  o  o
+#   row = 2:o  o  o  o
+#                 奇數行                            偶數行
+#row = 0       (0,1)   (0,2)       row = 1      (1,0)   (1,1)
+#                  \   /                            \   /
+#row = 1   (1,0) — (1,1) — (1,2)   row = 2  (2,0) — (2,1) — (2,2)
+#                  /   \                            /   \
+#row = 2        (2,1)   (2,2)      row = 3      (3,0)   (3,1)
+    direction_odd = [(-1, 0),(-1, 1), (0, -1), (0, 1), (1, 0), (1, 1)]
+    direction_even = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, -1), (1, 0)]
+
+    visited = set()
+    stack = [(newRow, newCol)]
+
+    while stack:
+        #刪除新增
+        r, c = stack.pop()
+        if (r, c) in visited:
+            continue
+        visited.add((r,c))
+        
+        #確保在正確的範圍裡，避免錯誤
+        if 0 <= r < row and 0 <= c < col:
+            #如果在正確的範圍內就會加入BubbleArray
+            bubble = bubbleArray[r][c]
+            #如果泡泡不為空且顏色相同
+            if bubble != BLANK and bubble.color == newBubbleColor:
+                #則會進入需要被刪除的泡泡
+                deleteList.append((r, c))
+
+            if r % 2 == 0:
+                directions = direction_even
+            else:
+                directions = direction_odd
+            
+            #加上相鄰的泡泡
+            for dr, dc in directions:
+                #加上偏移量 = 實際座標
+                nr, nc = r + dr, c + dc
+                if (0 <= nr < row and 0 <= nc < col) and ((nr, nc) not in visited):
+                    stack.append((nr, nc))
+
+def checkForFloaters(bubbleArray):
+    row = len(bubbleArray)
+    col = len(bubbleArray[0])
+    visited = set()
+
+    direction_odd = [(-1, 0),(-1, 1), (0, -1), (0, 1), (1, 0), (1, 1)]
+    direction_even = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, -1), (1, 0)]
+
+    stack = []
+    for i in range(col):
+        if bubbleArray[0][i] != BLANK:
+            stack.append((0, i))
+            visited.add((0, i))
+    
+    while stack:
+        r, c = stack.pop()
+        if r % 2 == 0:
+            directions = direction_even
+        else:
+            directions = direction_even
+
+        for dr, dc in directions:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < row and 0 <= nc < col and bubbleArray[nr][nc] != BLANK and (nr, nc) not in visited:
+                visited.add((nr, nc))
+                stack.append((nr, nc))
+        
+        #移除不在尋找範圍的泡泡
+        for r in range(row):
+            for c in range(col):
+                if bubbleArray[r][c] != BLANK and (r, c) not in visited:
+                    bubbleArray[r][c] = BLANK
+    
+def drawBubbleArray(array):
+    for row in range(arrayheight):
+        for col in range(len(array[row])):
+            if array[row][col] != BLANK:
+                array[row][col].draw()
+
+def updateColorList(bubbleArray):
+    newColorList = []
+    for row in range(len(bubbleArray)):
+        for column in range(len(bubbleArray[0])):
+            if bubbleArray[row][column] != BLANK:
+                newColorList.append(bubbleArray[row][column].color)
+
+    
+    colorSet = set(newColorList)
+
+    if len(colorSet) < 1:
+        colorList = []
+        colorList.append(white)
+        return colorList
+    
+    else:
+        return list(colorSet)
+def coverNextBubble():
+    whiteRect = pygame.Rect(0, 0, width, height)
+    whiteRect.bottom = height
+    whiteRect.right = width
+    pygame.draw.rect(canva, bgcolor, whiteRect)
+
+def main():
+    global FPSclock, canva, text
+    pygame.init()
+    FPSclock = pygame.time.Clock()
+    gameColorList = copy.deepcopy(colorList)
+    text = pygame.font.SysFont('Helvetica', textheight)
+    canva = pygame.display.set_mode((width, height))
+    canva.fill(bgcolor)
+    pygame.display.update()
+    tracer = 0
+    direction = None
+    launchBubble = False
+    newBubble = None
+
+    arrow = Arrow()
+    bubbleArray = makeBlankBoard()
+    setBubble(bubbleArray, gameColorList)
+
+    nextBubble = Bubble(gameColorList[0])
+    nextBubble.rect.right = width - 5
+    nextBubble.rect.bottom = height - 5
+
+    score = Score()
+
+    running = True
+    while running:
+        canva.fill(bgcolor)
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+               pygame.quit()
+               sys.exit()
+            
+            elif event.type == KEYDOWN:
+                if event.key == K_LEFT:
+                    direction = LEFT
+                elif event.key == K_RIGHT:
+                    direction = RIGHT
+            
+            elif event.type == KEYUP:
+                direction = None
+                if event.key == K_TAB:
+                    launchBubble = True
+                elif event.key == K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+        if launchBubble == True:
+            if newBubble == None:
+                newBubble = Bubble(nextBubble.color)
+                newBubble.rect.centerx = startX
+                newBubble.rect.centery = startY
+                newBubble.angle = arrow.angle
+
+                # 更新下一顆球
+                gameColorList = updateColorList(bubbleArray)
+                random.shuffle(gameColorList)
+                nextBubble = Bubble(gameColorList[0])
+                nextBubble.rect.right = width - 5
+                nextBubble.rect.bottom = height - 5
+
+            newBubble.update()
+            newBubble.draw()
+            
+            if newBubble.rect.right >= width - 5:
+                newBubble.angle = 180 - newBubble.angle
+            elif newBubble.rect.left <= 5:
+                newBubble.angle = 180 - newBubble.angle
+            
+            launchBubble, newBubble, score = stopBubble(bubbleArray, newBubble, launchBubble, score)
+
+            finalBubbleList = []
+            for row in range(len(bubbleArray)):
+                for col in range(len(bubbleArray[0])):
+                    if bubbleArray[row][col] != BLANK:
+                        finalBubbleList.append(bubbleArray[row][col])
+                        if bubbleArray[row][col].rect.bottom > (height - arrow.rect.height - 5):
+                            return score.score, 'lose'
+                        
+            if len(finalBubbleList) < 1:
+                return score.score, 'win'
+            
+            gameColorList = updateColorList(bubbleArray)
+            random.shuffle(gameColorList)
+
+            if launchBubble == False:
+                nextBubble = Bubble(gameColorList[0])
+                nextBubble.rect.right = width - 5
+                nextBubble.rect.bottom = height - 5
+        nextBubble.draw()
+        if launchBubble == True:
+            coverNextBubble()
+        
+        arrow.update(direction)
+        arrow.draw()
+
+        setArrayPos(bubbleArray)
+        drawBubbleArray(bubbleArray)
+
+        score.draw()
+
+        pygame.display.update()
+        FPSclock.tick(FPS)
+
+if __name__ == "__main__":
+    main()
